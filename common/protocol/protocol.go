@@ -1,28 +1,31 @@
 package protocol
 
 import (
-	"fmt"
 	"encoding/binary"
 	"encoding/hex"
+	"fmt"
+
 	"github.com/google/uuid"
 )
 
 const NumHeaderBytes = 262
 
 type OpType int
+
 const (
-	SingleCopyOpType         = iota
+	SingleCopyOpType = iota
 	SingleCopySuccessResponseType
 	MultiPartCopyInitOpType
 	MultiPartCopyInitSuccessResponseOpType
+	MultiPartCopyPartRequestOpType
 	Unknown
 )
 const (
-	singleCopyRequestOpCode         = "SC"
-	singleCopySuccessResponseOpCode = "SS"
-	multiPartInitRequestOpCode      =  "MI"
+	singleCopyRequestOpCode            = "SC"
+	singleCopySuccessResponseOpCode    = "SS"
+	multiPartInitRequestOpCode         = "MI"
 	multiPartInitSuccessResponseOpCode = "MS"
-
+	multiPartCopyPartRequestOpCode     = "MC"
 )
 
 type CopyOp interface {
@@ -31,7 +34,7 @@ type CopyOp interface {
 }
 
 type SingleCopyOp struct {
-	filePath string
+	filePath      string
 	contentLength uint32
 }
 
@@ -43,10 +46,11 @@ const (
 	INPROGRESS
 	COMPLETED
 )
+
 type MultiPartCopyOp struct {
 	filePath string
-	state MultiPartOpState
-	copyId string
+	state    MultiPartOpState
+	copyId   string
 }
 
 type SingleCopySuccessResponseOp struct {
@@ -61,18 +65,18 @@ func NewSingleCopyOp(b []byte) *SingleCopyOp {
 	//TODO : fix endian, taking little for my machine
 	contentLength := binary.LittleEndian.Uint32(b[2:6])
 	pathLen := uint8(b[6])
-	fmt.Println("pathLen is ",pathLen)
-	fmt.Println("path is ",string(b[7:7+pathLen]),contentLength)
-	return &SingleCopyOp{string(b[7:7+pathLen]),contentLength}
+	fmt.Println("pathLen is ", pathLen)
+	fmt.Println("path is ", string(b[7:7+pathLen]), contentLength)
+	return &SingleCopyOp{string(b[7 : 7+pathLen]), contentLength}
 }
 
 func NewMultiPartCopyOp(b []byte) *MultiPartCopyOp {
 	//TODO : fix endian, taking little for my machine
 	//contentLength := binary.LittleEndian.Uint32(b[2:6])
 	pathLen := uint8(b[2])
-	fmt.Println("pathLen is ",pathLen)
-	fmt.Println("path is ",string(b[3:3+pathLen]))
-	return &MultiPartCopyOp{string(b[3:3+pathLen]),INITIALIZING,uuid.New().String()}
+	fmt.Println("pathLen is ", pathLen)
+	fmt.Println("path is ", string(b[3:3+pathLen]))
+	return &MultiPartCopyOp{string(b[3 : 3+pathLen]), INITIALIZING, uuid.New().String()}
 }
 
 func (mco *MultiPartCopyOp) GetCopyId() string {
@@ -81,20 +85,19 @@ func (mco *MultiPartCopyOp) GetCopyId() string {
 
 func NewSingleCopySuccessResponseOp(b []byte) *SingleCopySuccessResponseOp {
 	fmt.Println(b)
-	fmt.Println("csum is",hex.EncodeToString(b[2:2+16]))
-	return &SingleCopySuccessResponseOp{hex.EncodeToString(b[2:2+16])}
+	fmt.Println("csum is", hex.EncodeToString(b[2:2+16]))
+	return &SingleCopySuccessResponseOp{hex.EncodeToString(b[2 : 2+16])}
 }
 
-
-func NewMultiPartCopyInitSuccessResponseOp(b []byte) (*MultiPartCopyInitSuccessResponseOp,error) {
-	uuid,err := uuid.FromBytes(b[2:2+16])
+func NewMultiPartCopyInitSuccessResponseOp(b []byte) (*MultiPartCopyInitSuccessResponseOp, error) {
+	uuid, err := uuid.FromBytes(b[2 : 2+16])
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
 	return &MultiPartCopyInitSuccessResponseOp{uuid.String()}, nil
 }
 
-func (nsr *SingleCopySuccessResponseOp) GetMd5() string{
+func (nsr *SingleCopySuccessResponseOp) GetMd5() string {
 	return nsr.Md5
 }
 
@@ -102,16 +105,16 @@ func (nmir *MultiPartCopyInitSuccessResponseOp) GetUuid() string {
 	return nmir.copyId
 }
 
-func (sco *SingleCopyOp) GetContentLength() uint32{
+func (sco *SingleCopyOp) GetContentLength() uint32 {
 	return sco.contentLength
 }
 
-func (sco *SingleCopyOp) GetFilePath() string{
+func (sco *SingleCopyOp) GetFilePath() string {
 	return sco.filePath
 }
 
 func GetOp(b []byte) OpType {
-	fmt.Println("all bytes is ",b[:])
+	fmt.Println("all bytes is ", b[:])
 	fmt.Println(string(b[:2]))
 	switch string(b[:2]) {
 	case singleCopyRequestOpCode:
@@ -122,49 +125,62 @@ func GetOp(b []byte) OpType {
 		return MultiPartCopyInitOpType
 	case multiPartInitSuccessResponseOpCode:
 		return MultiPartCopyInitSuccessResponseOpType
+	case multiPartCopyPartRequestOpCode:
+		return MultiPartCopyPartRequestOpType
 	default:
 		return Unknown
 	}
 }
 
 func GetSingleCopySuccessOp(csum []byte) []byte {
-	bytes := make([]byte,NumHeaderBytes)
+	bytes := make([]byte, NumHeaderBytes)
 	header := []byte(singleCopySuccessResponseOpCode)
-	header = append(header,csum...)
-	copy(bytes[:],header)
+	header = append(header, csum...)
+	copy(bytes[:], header)
 	return bytes
 }
 
 func GetMultiPartCopyInitSuccessOp(copyId string) []byte {
-	bytes := make([]byte,NumHeaderBytes)
+	bytes := make([]byte, NumHeaderBytes)
 	header := []byte(multiPartInitSuccessResponseOpCode)
-	header = append(header,[]byte(copyId)...)
-	copy(bytes[:],header)
+	header = append(header, []byte(copyId)...)
+	copy(bytes[:], header)
 	return bytes
 }
 
-func PrepareSingleCopyOpHeader(remoteFile string,fileSize int) []byte{
-	bytes := make([]byte,NumHeaderBytes)
-	contLen := make([]byte,4)
-	binary.LittleEndian.PutUint32(contLen,uint32(fileSize))
-
+func PrepareSingleCopyOpHeader(remoteFile string, fileSize int) []byte {
+	bytes := make([]byte, NumHeaderBytes)
+	contLen := make([]byte, 4)
+	binary.LittleEndian.PutUint32(contLen, uint32(fileSize))
 
 	header := []byte(singleCopyRequestOpCode)
-	header = append(header,contLen...)
-	header = append(header,byte(uint8(len(remoteFile))))
-	header = append(header,[]byte(remoteFile)...)
+	header = append(header, contLen...)
+	header = append(header, byte(uint8(len(remoteFile))))
+	header = append(header, []byte(remoteFile)...)
 
-	copy(bytes[:],header)
+	copy(bytes[:], header)
 	return bytes
 }
-func PrepareMultiPartInitOpHeader(remoteFile string,fileSize int) []byte{
-	bytes := make([]byte,NumHeaderBytes)
+func PrepareMultiPartInitOpHeader(remoteFile string, fileSize int) []byte {
+	bytes := make([]byte, NumHeaderBytes)
 
 	header := []byte(multiPartInitRequestOpCode)
-	header = append(header,byte(uint8(len(remoteFile))))
-	header = append(header,[]byte(remoteFile)...)
+	header = append(header, byte(uint8(len(remoteFile))))
+	header = append(header, []byte(remoteFile)...)
 
-	copy(bytes[:],header)
+	copy(bytes[:], header)
 	return bytes
 }
 
+func PrepareMultiPartCopyPartOpHeader(partNum uint64, copyId string) []byte {
+	bytes := make([]byte, NumHeaderBytes)
+	pNum := make([]byte, 8)
+	binary.LittleEndian.PutUint64(pNum, uint64(partNum))
+
+	header := []byte(multiPartCopyPartRequestOpCode)
+	header = append(header, pNum...)
+	header = append(header, []byte(copyId)...)
+
+	copy(bytes[:], header)
+	return bytes
+}

@@ -1,21 +1,22 @@
 package controller
 
 import (
-	"net"
-	"fmt"
-	"os"
-	"github.com/chili-copy/server/writer"
-	"github.com/chili-copy/common/protocol"
 	"crypto/md5"
+	"fmt"
+	"net"
+	"os"
 	"sync"
+
+	"github.com/chili-copy/common/protocol"
+	"github.com/chili-copy/server/writer"
 )
 
 type ChiliController struct {
-	acceptedConns chan net.Conn
+	acceptedConns  chan net.Conn
 	onGoingCopyOps sync.Map
 }
 
-func NewChiliController() *ChiliController{
+func NewChiliController() *ChiliController {
 	return &ChiliController{}
 }
 
@@ -28,7 +29,7 @@ func (cc *ChiliController) AddConnToQ(conn net.Conn) {
 }
 
 func (cc *ChiliController) CreateAcceptedConnHandlers(size int) {
-	for i:=0;i<size;i++ {
+	for i := 0; i < size; i++ {
 		go cc.handleConnection()
 	}
 }
@@ -38,7 +39,7 @@ func (cc *ChiliController) handleConnection() {
 		var filePath string
 		b := make([]byte, protocol.NumHeaderBytes)
 		len, err := conn.Read(b)
-		fmt.Println("len is ",len)
+		fmt.Println("len is ", len)
 		if err != nil {
 			fmt.Println(err)
 			os.Exit(1)
@@ -47,48 +48,51 @@ func (cc *ChiliController) handleConnection() {
 		switch opType {
 		case protocol.SingleCopyOpType:
 			sco := protocol.NewSingleCopyOp(b)
-			opHandle := writer.SingleCopyHandler{Conn:conn,Md5:md5.New(),CopyOp:sco}
+			opHandle := writer.SingleCopyHandler{Conn: conn, Md5: md5.New(), CopyOp: sco}
 			_, ok := cc.onGoingCopyOps.Load(filePath)
 			if ok {
-				singleCopyErrorResponse(err,conn)
+				singleCopyErrorResponse(err, conn)
 				conn.Close()
 				return
 			} else {
 				cc.onGoingCopyOps.Store(filePath, opHandle)
 				csum, err := opHandle.Handle()
 				if err != nil {
-					singleCopyErrorResponse(err,conn)
+					singleCopyErrorResponse(err, conn)
 					cc.onGoingCopyOps.Delete(filePath)
 					conn.Close()
 					return
 				}
-				singleCopySuccessResponse(csum,conn)
+				singleCopySuccessResponse(csum, conn)
 				cc.onGoingCopyOps.Delete(filePath)
 				conn.Close()
 			}
 		case protocol.MultiPartCopyInitOpType:
 			mpo := protocol.NewMultiPartCopyOp(b)
-			opHandle := writer.MultiPartCopyHandler{Conn:conn,CopyOp:mpo}
+			opHandle := writer.MultiPartCopyHandler{Conn: conn, CopyOp: mpo}
 			_, ok := cc.onGoingCopyOps.Load(filePath)
 			if ok {
-				singleCopyErrorResponse(err,conn)
+				singleCopyErrorResponse(err, conn)
 				conn.Close()
 				return
 			} else {
 				cc.onGoingCopyOps.Store(filePath, opHandle)
 				copyId, err := opHandle.Handle()
 				if err != nil {
-					singleCopyErrorResponse(err,conn)
+					singleCopyErrorResponse(err, conn)
 					cc.onGoingCopyOps.Delete(filePath)
 					conn.Close()
 					return
 				}
-				multiPartCopyInitSuccessResponse(copyId,conn)
+				multiPartCopyInitSuccessResponse(copyId, conn)
 			}
+		case protocol.MultiPartCopyPartRequestOpType:
+			fmt.Println("MultiPartCopyPartRequestOpType")
+			//TODO:Implement
 		}
 	}
 }
-func singleCopySuccessResponse(csum []byte,conn net.Conn) {
+func singleCopySuccessResponse(csum []byte, conn net.Conn) {
 	toBeWritten := len(csum)
 	for toBeWritten > 0 {
 		len, err := conn.Write(protocol.GetSingleCopySuccessOp(csum))
@@ -100,7 +104,7 @@ func singleCopySuccessResponse(csum []byte,conn net.Conn) {
 	}
 }
 
-func singleCopyErrorResponse(err error,conn net.Conn) {
+func singleCopyErrorResponse(err error, conn net.Conn) {
 
 }
 

@@ -1,39 +1,39 @@
 package writer
 
 import (
+	"fmt"
+	"hash"
 	"net"
 	"os"
-	"hash"
+
 	"github.com/chili-copy/common/protocol"
-	"fmt"
 )
 
 type SingleCopyHandler struct {
-	Conn net.Conn
-	fd *os.File
-	Md5 hash.Hash
+	Conn   net.Conn
+	fd     *os.File
+	Md5    hash.Hash
 	CopyOp *protocol.SingleCopyOp
 }
 
 type MultiPartCopyHandler struct {
-	Conn net.Conn
-	fd *os.File
-	Md5 hash.Hash
+	Conn   net.Conn
+	fd     *os.File
+	Md5    hash.Hash
 	CopyOp *protocol.MultiPartCopyOp
 }
 
-func (sc *MultiPartCopyHandler) Handle() (string,error) {
-	return sc.CopyOp.GetCopyId(),nil
+func (sc *MultiPartCopyHandler) Handle() (string, error) {
+	return sc.CopyOp.GetCopyId(), nil
 }
 
-
-func (sc *SingleCopyHandler) Handle() ([]byte,error) {
+func (sc *SingleCopyHandler) Handle() ([]byte, error) {
 	b := make([]byte, 4096)
-	f, err := os.OpenFile(sc.CopyOp.GetFilePath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY,0644)
+	f, err := os.OpenFile(sc.CopyOp.GetFilePath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return nil,err
+		return nil, err
 	}
-	sc.fd = f;
+	sc.fd = f
 	defer sc.fd.Close()
 	f.Truncate(0)
 	toBeRead := sc.CopyOp.GetContentLength()
@@ -41,14 +41,14 @@ func (sc *SingleCopyHandler) Handle() ([]byte,error) {
 	for toBeRead > 0 {
 		len, err := sc.Conn.Read(b)
 		if err != nil {
-			return nil,err
+			return nil, err
 		}
-		fmt.Println("content read",b)
+		fmt.Println("content read", b)
 		err = sc.createOrAppendFile(b[:len])
 		if err != nil {
-			return nil,err
+			return nil, err
 		}
-		toBeRead = toBeRead - uint32(len);
+		toBeRead = toBeRead - uint32(len)
 	}
 
 	return sc.Md5.Sum(nil), nil

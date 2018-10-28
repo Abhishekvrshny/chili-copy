@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+
 	"github.com/chili-copy/server/controller"
 )
 
@@ -14,7 +15,7 @@ func main() {
 	cc := controller.NewChiliController()
 	cc.MakeAcceptedConnQ(20)
 	cc.CreateAcceptedConnHandlers(20)
-	startChiliServer(cc,"tcp", ":5678")
+	startChiliServer(cc, "tcp", ":5678")
 }
 
 func startChiliServer(cc *controller.ChiliController, network string, port string) {

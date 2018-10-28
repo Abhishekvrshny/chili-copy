@@ -5,13 +5,13 @@ import (
 )
 
 type FileChunk struct {
-	fd os.File
-	size int
+	fd     os.File
+	size   int
 	offset int
 }
 
-func NewFileChunk(fd os.File, size int, offset int) *FileChunk{
-	return &FileChunk{fd,size,offset}
+func NewFileChunk(fd os.File, size int, offset int) *FileChunk {
+	return &FileChunk{fd, size, offset}
 }
 
 func (fc *FileChunk) Read() []byte {

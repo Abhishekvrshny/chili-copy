@@ -1,14 +1,22 @@
 package main
 
 import (
-	"fmt"
-	"net"
-	"os"
-	"io/ioutil"
-	"github.com/chili-copy/common/protocol"
-	"io"
 	"crypto/md5"
 	"encoding/hex"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"net"
+	"os"
+
+	"github.com/chili-copy/client/multipart"
+	"github.com/chili-copy/common"
+	"github.com/chili-copy/common/protocol"
+)
+
+const (
+	network = "tcp"
+	address = "localhost:5678"
 )
 
 func main() {
@@ -25,7 +33,7 @@ func sendToServer() {
 		fmt.Println(err)
 		return
 	}
-	conn, err := net.Dial("tcp", "localhost:5678")
+	conn, err := net.Dial(network, address)
 	if err != nil {
 		os.Exit(1)
 	}
@@ -35,38 +43,28 @@ func sendToServer() {
 	}
 	hashInBytes := hash.Sum(nil)[:16]
 	returnMD5String := hex.EncodeToString(hashInBytes)
-	fileSize := size(fd)
+	fileSize := common.FileSize(fd)
 	if fileSize < 1000 {
-		singleCopy(localFile,remoteFile, conn, fileSize, returnMD5String)
+		singleCopy(localFile, remoteFile, conn, fileSize, returnMD5String)
 	} else {
-		multiPartCopy(localFile,remoteFile, conn, fileSize, returnMD5String)
+		multiPartCopy(localFile, remoteFile, conn, fileSize, returnMD5String)
 		//singleCopy(localFile,remoteFile, conn, fileSize, returnMD5String)
 	}
 
 }
 
-func size(fd *os.File) int {
-	fileinfo, err := fd.Stat()
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-	filesize := int(fileinfo.Size())
-	return filesize
-}
-
-func singleCopy(localFile string,remoteFile string,conn net.Conn, fileSize int, returnMD5String string) {
-	conn.Write(protocol.PrepareSingleCopyOpHeader(remoteFile,fileSize))
-	b,err := ioutil.ReadFile(localFile)
+func singleCopy(localFile string, remoteFile string, conn net.Conn, fileSize int, returnMD5String string) {
+	conn.Write(protocol.PrepareSingleCopyOpHeader(remoteFile, fileSize))
+	b, err := ioutil.ReadFile(localFile)
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 	fmt.Println(string(b[:]))
 	conn.Write(b)
-	bR := make([]byte,protocol.NumHeaderBytes)
+	bR := make([]byte, protocol.NumHeaderBytes)
 	conn.Read(bR)
-	opType :=protocol.GetOp(bR)
+	opType := protocol.GetOp(bR)
 	switch opType {
 	case protocol.SingleCopySuccessResponseType:
 		nsr := protocol.NewSingleCopySuccessResponseOp(bR)
@@ -76,18 +74,20 @@ func singleCopy(localFile string,remoteFile string,conn net.Conn, fileSize int, 
 	}
 }
 
-func multiPartCopy(localFile string,remoteFile string, conn net.Conn, fileSize int, returnMD5String string) {
-	b := protocol.PrepareMultiPartInitOpHeader(remoteFile,fileSize)
+func multiPartCopy(localFile string, remoteFile string, conn net.Conn, fileSize int, returnMD5String string) {
+	b := protocol.PrepareMultiPartInitOpHeader(remoteFile, fileSize)
 	conn.Write(b)
-	bR := make([]byte,protocol.NumHeaderBytes)
+	bR := make([]byte, protocol.NumHeaderBytes)
 	conn.Read(bR)
-	opType :=protocol.GetOp(bR)
+	opType := protocol.GetOp(bR)
 	switch opType {
 	case protocol.MultiPartCopyInitSuccessResponseOpType:
-		mir,err := protocol.NewMultiPartCopyInitSuccessResponseOp(bR)
+		mir, err := protocol.NewMultiPartCopyInitSuccessResponseOp(bR)
 		if err != nil {
 			os.Exit(1)
 		}
-		fmt.Println("copyId received is ",mir.GetUuid())
+		fmt.Println("copyId received is ", mir.GetUuid())
+		muh := multipart.NewMultiPartCopyHandler(mir.GetUuid(), localFile, 500, 20, network, address)
+		muh.Handle()
 	}
 }
