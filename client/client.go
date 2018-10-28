@@ -6,6 +6,9 @@ import (
 	"os"
 	"io/ioutil"
 	"github.com/chili-copy/common/protocol"
+	"io"
+	"crypto/md5"
+	"encoding/hex"
 )
 
 func main() {
@@ -17,6 +20,7 @@ func sendToServer() {
 	localFile := "/tmp/test.txt"
 	remoteFile := "/tmp/abc.txt"
 	fd, err := os.Open(localFile)
+	defer fd.Close()
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -25,9 +29,19 @@ func sendToServer() {
 	if err != nil {
 		os.Exit(1)
 	}
+	hash := md5.New()
+	if _, err := io.Copy(hash, fd); err != nil {
+		os.Exit(1)
+	}
+	hashInBytes := hash.Sum(nil)[:16]
+	returnMD5String := hex.EncodeToString(hashInBytes)
 	fileSize := size(fd)
 	if fileSize < 1000 {
-		singleCopy(localFile,remoteFile, conn, fileSize)
+		singleCopy(localFile,remoteFile, conn, fileSize, returnMD5String)
+	} else {
+		//multiPartCopy(localFile,remoteFile, conn, fileSize, returnMD5String)
+		singleCopy(localFile,remoteFile, conn, fileSize, returnMD5String)
+
 	}
 
 }
@@ -42,7 +56,7 @@ func size(fd *os.File) int {
 	return filesize
 }
 
-func singleCopy(localFile string,remoteFile string,conn net.Conn, fileSize int) {
+func singleCopy(localFile string,remoteFile string,conn net.Conn, fileSize int, returnMD5String string) {
 	conn.Write(protocol.PrepareSingleCopyOpHeader(remoteFile,fileSize))
 	b,err := ioutil.ReadFile(localFile)
 	if err != nil {
@@ -51,12 +65,18 @@ func singleCopy(localFile string,remoteFile string,conn net.Conn, fileSize int) 
 	}
 	fmt.Println(string(b[:]))
 	conn.Write(b)
-	bR := make([]byte,262)
+	bR := make([]byte,protocol.NumHeaderBytes)
 	conn.Read(bR)
 	opType :=protocol.GetOp(bR)
 	switch opType {
 	case protocol.SuccessResponse:
 		nsr := protocol.NewSuccessResponseOp(bR)
-		fmt.Println(nsr.GetMd5())
+		if nsr.GetMd5() == returnMD5String {
+			fmt.Println("Successfully copied file")
+		}
 	}
+}
+
+func multiPartCopy(localFile string,remoteFile string, conn net.Conn, fileSize int, returnMD5String string) {
+
 }

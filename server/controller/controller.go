@@ -7,15 +7,16 @@ import (
 	"github.com/chili-copy/server/writer"
 	"github.com/chili-copy/common/protocol"
 	"crypto/md5"
+	"sync"
 )
 
 type ChiliController struct {
 	acceptedConns chan net.Conn
-	onGoingCopyOps map[string]interface{}
+	onGoingCopyOps sync.Map
 }
 
 func NewChiliController() *ChiliController{
-	return &ChiliController{onGoingCopyOps:make(map[string]interface{})}
+	return &ChiliController{}
 }
 
 func (cc *ChiliController) MakeAcceptedConnQ(size int) {
@@ -35,7 +36,7 @@ func (cc *ChiliController) CreateAcceptedConnHandlers(size int) {
 func (cc *ChiliController) handleConnection() {
 	for conn := range cc.acceptedConns {
 		var filePath string
-		b := make([]byte, 262)
+		b := make([]byte, protocol.NumHeaderBytes)
 		len, err := conn.Read(b)
 		fmt.Println("len is ",len)
 		if err != nil {
@@ -47,23 +48,23 @@ func (cc *ChiliController) handleConnection() {
 		case protocol.SingleCopyOpType:
 			sco := protocol.NewSingleCopyOp(b)
 			opHandle := writer.SingleCopyHandler{Conn:conn,Md5:md5.New(),CopyOp:sco}
-			_, ok := cc.onGoingCopyOps[filePath];
+			_, ok := cc.onGoingCopyOps.Load(filePath)
 			if ok {
 				errorResponse(err,conn)
 				conn.Close()
 				return
 			}
 			if !ok {
-				cc.onGoingCopyOps[filePath] = opHandle
+				cc.onGoingCopyOps.Store(filePath, opHandle)
 				csum, err := opHandle.Write()
 				if err != nil {
 					errorResponse(err,conn)
+					cc.onGoingCopyOps.Delete(filePath)
 					conn.Close()
 					return
 				}
-				fmt.Println("writing success response")
-
 				successResponse(csum,conn)
+				cc.onGoingCopyOps.Delete(filePath)
 				conn.Close()
 			}
 		}

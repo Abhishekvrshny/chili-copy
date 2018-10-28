@@ -44,14 +44,10 @@ func (sc *SingleCopyHandler) Write() ([]byte,error) {
 }
 
 func (sc *SingleCopyHandler) createOrAppendFile(b []byte) error {
-	toBeWritten := len(b)
-	for toBeWritten>0 {
-		len, err := sc.fd.Write(b)
-		if err != nil {
-			return err
-		}
-		sc.Md5.Write(b[:len])
-		toBeWritten = toBeWritten - len
+	len, err := sc.fd.Write(b)
+	if err != nil {
+		return err
 	}
+	sc.Md5.Write(b[:len])
 	return nil
 }

@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 )
 
+const NumHeaderBytes = 262
+
 type OpType int
 const (
 	SingleCopyOpType = iota
@@ -13,8 +15,8 @@ const (
 	Unknown
 )
 const (
-	singleCopyOpCode = "SC"
-	successResponse  = "SS"
+	singleCopyOpCode      = "SC"
+	successResponseOpCode = "SS"
 
 )
 
@@ -65,7 +67,7 @@ func GetOp(b []byte) OpType {
 	switch string(b[:2]) {
 	case singleCopyOpCode:
 		return SingleCopyOpType
-	case successResponse:
+	case successResponseOpCode:
 		return SuccessResponse
 	default:
 		return Unknown
@@ -74,7 +76,7 @@ func GetOp(b []byte) OpType {
 
 func GetSuccessOp(csum []byte) []byte {
 	bytes := make([]byte,256)
-	header := []byte("SS")
+	header := []byte(successResponseOpCode)
 	header = append(header,csum...)
 	copy(bytes[:],header)
 	return bytes
@@ -83,23 +85,15 @@ func GetSuccessOp(csum []byte) []byte {
 func PrepareSingleCopyOpHeader(remoteFile string,fileSize int) []byte{
 	bytes := make([]byte,256)
 	contLen := make([]byte,4)
-
-	header := []byte("SC")
-	fmt.Println("size of SingleCopyOp header 1", len(header))
 	binary.LittleEndian.PutUint32(contLen,uint32(fileSize))
+
+
+	header := []byte(singleCopyOpCode)
 	header = append(header,contLen...)
-	fmt.Println("size of SingleCopyOp header 2", len(header))
-
 	header = append(header,byte(uint8(len(remoteFile))))
-	fmt.Println("size of SingleCopyOp header 3", len(header))
-
 	header = append(header,[]byte(remoteFile)...)
-	fmt.Println("size of SingleCopyOp header 4", len(header))
 
-	//opHeader := fmt.Sprintf(singleCopyOpFormat,int8(len(remoteFile)),remoteFile)
-	//fmt.Println("op header", opHeader)
 	copy(bytes[:],header)
-	fmt.Println("size of SingleCopyOp header ", len(header))
 	return bytes
 }
 
