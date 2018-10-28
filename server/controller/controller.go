@@ -50,33 +50,48 @@ func (cc *ChiliController) handleConnection() {
 			opHandle := writer.SingleCopyHandler{Conn:conn,Md5:md5.New(),CopyOp:sco}
 			_, ok := cc.onGoingCopyOps.Load(filePath)
 			if ok {
-				errorResponse(err,conn)
+				singleCopyErrorResponse(err,conn)
 				conn.Close()
 				return
-			}
-			if !ok {
+			} else {
 				cc.onGoingCopyOps.Store(filePath, opHandle)
-				csum, err := opHandle.Write()
+				csum, err := opHandle.Handle()
 				if err != nil {
-					errorResponse(err,conn)
+					singleCopyErrorResponse(err,conn)
 					cc.onGoingCopyOps.Delete(filePath)
 					conn.Close()
 					return
 				}
-				successResponse(csum,conn)
+				singleCopySuccessResponse(csum,conn)
 				cc.onGoingCopyOps.Delete(filePath)
 				conn.Close()
+			}
+		case protocol.MultiPartCopyInitOpType:
+			mpo := protocol.NewMultiPartCopyOp(b)
+			opHandle := writer.MultiPartCopyHandler{Conn:conn,CopyOp:mpo}
+			_, ok := cc.onGoingCopyOps.Load(filePath)
+			if ok {
+				singleCopyErrorResponse(err,conn)
+				conn.Close()
+				return
+			} else {
+				cc.onGoingCopyOps.Store(filePath, opHandle)
+				copyId, err := opHandle.Handle()
+				if err != nil {
+					singleCopyErrorResponse(err,conn)
+					cc.onGoingCopyOps.Delete(filePath)
+					conn.Close()
+					return
+				}
+				multiPartCopyInitSuccessResponse(copyId,conn)
 			}
 		}
 	}
 }
-
-func successResponse(csum []byte,conn net.Conn) {
+func singleCopySuccessResponse(csum []byte,conn net.Conn) {
 	toBeWritten := len(csum)
-	fmt.Println("writing success response")
-
 	for toBeWritten > 0 {
-		len, err := conn.Write(protocol.GetSuccessOp(csum))
+		len, err := conn.Write(protocol.GetSingleCopySuccessOp(csum))
 		if err != nil {
 			fmt.Println("Error sending success response")
 			os.Exit(1)
@@ -85,6 +100,18 @@ func successResponse(csum []byte,conn net.Conn) {
 	}
 }
 
-func errorResponse(err error,conn net.Conn) {
+func singleCopyErrorResponse(err error,conn net.Conn) {
 
+}
+
+func multiPartCopyInitSuccessResponse(copyId string, conn net.Conn) {
+	toBeWritten := len(copyId)
+	for toBeWritten > 0 {
+		len, err := conn.Write(protocol.GetMultiPartCopyInitSuccessOp(copyId))
+		if err != nil {
+			fmt.Println("Error sending success response")
+			os.Exit(1)
+		}
+		toBeWritten = toBeWritten - len
+	}
 }

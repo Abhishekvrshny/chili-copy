@@ -15,7 +15,19 @@ type SingleCopyHandler struct {
 	CopyOp *protocol.SingleCopyOp
 }
 
-func (sc *SingleCopyHandler) Write() ([]byte,error) {
+type MultiPartCopyHandler struct {
+	Conn net.Conn
+	fd *os.File
+	Md5 hash.Hash
+	CopyOp *protocol.MultiPartCopyOp
+}
+
+func (sc *MultiPartCopyHandler) Handle() (string,error) {
+	return sc.CopyOp.GetCopyId(),nil
+}
+
+
+func (sc *SingleCopyHandler) Handle() ([]byte,error) {
 	b := make([]byte, 4096)
 	f, err := os.OpenFile(sc.CopyOp.GetFilePath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY,0644)
 	if err != nil {
