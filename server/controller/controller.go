@@ -2,6 +2,7 @@ package controller
 
 import (
 	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"net"
 	"os"
@@ -119,7 +120,11 @@ func (cc *ChiliController) handleConnection() {
 			fmt.Println("Received multipart copy complete req with copyId ", copyId)
 			opHandle, ok := cc.onGoingMultiCopies.Load(copyId)
 			if ok {
-				opHandle.(*writer.MultiPartCopyHandler).StitchChunks()
+				hash := opHandle.(*writer.MultiPartCopyHandler).StitchChunks()
+				fmt.Println("multipart hash is", hex.EncodeToString(hash))
+				cc.onGoingMultiCopies.Delete(copyId)
+				cc.onGoingCopyOps.Delete(opHandle.(*writer.MultiPartCopyHandler).CopyOp.GetFilePath())
+				multiPartCopyCompleteSuccessResponse(hash, conn)
 				conn.Close()
 			} else {
 				singleCopyErrorResponse(err, conn)
@@ -157,4 +162,18 @@ func multiPartCopyInitSuccessResponse(copyId uuid.UUID, conn net.Conn) {
 		}
 		toBeWritten = toBeWritten - len
 	}
+}
+
+func multiPartCopyCompleteSuccessResponse(csum []byte, conn net.Conn) {
+	payload := protocol.GetMultiPartCopySuccessOp(csum)
+	toBeWritten := len(payload)
+	for toBeWritten > 0 {
+		len, err := conn.Write(payload)
+		if err != nil {
+			fmt.Println("Error sending success response")
+			os.Exit(4)
+		}
+		toBeWritten = toBeWritten - len
+	}
+
 }

@@ -1,6 +1,7 @@
 package writer
 
 import (
+	"crypto/md5"
 	"fmt"
 	"hash"
 	"io"
@@ -28,7 +29,8 @@ func (mpc *MultiPartCopyHandler) IncreaseTotalPartsCopiedByOne() {
 	atomic.AddUint64(&mpc.TotalPartsCopied, 1)
 }
 
-func (mpc *MultiPartCopyHandler) StitchChunks() {
+func (mpc *MultiPartCopyHandler) StitchChunks() []byte {
+	hash := md5.New()
 	fout, err := os.OpenFile(mpc.CopyOp.GetFilePath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Println("error in MultiPartCopyHandler StitchChunks() : %s", err.Error())
@@ -52,6 +54,18 @@ func (mpc *MultiPartCopyHandler) StitchChunks() {
 			fmt.Println("error in Write ", err.Error())
 			os.Exit(99)
 		}
+		fin, err = os.Open(path)
+		if err != nil {
+			fmt.Println("Error in MultiPartCopyHandler opening chunk ", err.Error())
+			os.Exit(94)
+
+		}
+		defer fin.Close()
+		_, err = io.Copy(hash, fin)
+		if err != nil {
+			fmt.Println("error in Copy Hash ", err.Error())
+			os.Exit(99)
+		}
 		fin.Close()
 		if err := os.Remove(path); err != nil {
 			fmt.Println("Error removing chunk")
@@ -60,6 +74,7 @@ func (mpc *MultiPartCopyHandler) StitchChunks() {
 	if err := os.Remove("/tmp/" + mpc.CopyOp.GetCopyId().String()); err != nil {
 		fmt.Println("Error removing chunk")
 	}
+	return hash.Sum(nil)
 }
 
 func (sc *SingleCopyHandler) Handle() ([]byte, error) {

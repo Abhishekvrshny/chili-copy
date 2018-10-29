@@ -19,6 +19,7 @@ const (
 	MultiPartCopyInitSuccessResponseOpType
 	MultiPartCopyPartRequestOpType
 	MultiPartCopyCompleteOpType
+	MultiPartCopySuccessResponseType
 	Unknown
 )
 const (
@@ -28,6 +29,7 @@ const (
 	multiPartInitSuccessResponseOpCode = "MS"
 	multiPartCopyPartRequestOpCode     = "MC"
 	multiPartCompleteRequestOpCode     = "MT"
+	multiPartCopySuccessResponseOpCode = "MM"
 )
 
 type CopyOp interface {
@@ -142,6 +144,8 @@ func GetOp(b []byte) OpType {
 		return MultiPartCopyPartRequestOpType
 	case multiPartCompleteRequestOpCode:
 		return MultiPartCopyCompleteOpType
+	case multiPartCopySuccessResponseOpCode:
+		return MultiPartCopySuccessResponseType
 	default:
 		return Unknown
 	}
@@ -150,6 +154,14 @@ func GetOp(b []byte) OpType {
 func GetSingleCopySuccessOp(csum []byte) []byte {
 	bytes := make([]byte, NumHeaderBytes)
 	header := []byte(singleCopySuccessResponseOpCode)
+	header = append(header, csum...)
+	copy(bytes[:], header)
+	return bytes
+}
+
+func GetMultiPartCopySuccessOp(csum []byte) []byte {
+	bytes := make([]byte, NumHeaderBytes)
+	header := []byte(multiPartCopySuccessResponseOpCode)
 	header = append(header, csum...)
 	copy(bytes[:], header)
 	return bytes

@@ -89,11 +89,22 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 		defer muh.Close()
 		err = muh.Handle()
 		if err != nil {
+			fmt.Println("error is ", err.Error())
 			os.Exit(1)
 		}
 		nConn := GetConnection(network, address)
 		b := protocol.PrepareMultiPartCompleteOpHeader(mir.GetCopyId(), fileSize)
 		nConn.Write(b)
+		bR := make([]byte, protocol.NumHeaderBytes)
+		nConn.Read(bR)
+		opType := protocol.GetOp(bR)
+		switch opType {
+		case protocol.MultiPartCopySuccessResponseType:
+			nsr := protocol.NewSingleCopySuccessResponseOp(bR)
+			if nsr.GetCsum() == returnMD5String {
+				fmt.Printf("Response : Successfully copied : %s to %s:%s : size=%d, csum=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
+			}
+		}
 
 	}
 }
