@@ -27,7 +27,7 @@ func (sc *SingleCopyHandler) Handle() ([]byte, error) {
 	b := make([]byte, 4096)
 	f, err := os.OpenFile(sc.CopyOp.GetFilePath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Println("error in SingleCopyHandler Handle() : %s",err.Error())
+		fmt.Println("error in SingleCopyHandler Handle() : %s", err.Error())
 		return nil, err
 	}
 	sc.fd = f

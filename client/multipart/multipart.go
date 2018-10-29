@@ -1,6 +1,8 @@
 package multipart
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"hash"
 	"math"
@@ -10,8 +12,6 @@ import (
 	"github.com/chili-copy/common"
 	"github.com/chili-copy/common/protocol"
 	"github.com/google/uuid"
-	"crypto/md5"
-	"encoding/hex"
 )
 
 type chunkUploadStatus int
@@ -68,7 +68,7 @@ func NewMultiPartCopyHandler(copyId uuid.UUID, localFile string, chunkSize int, 
 	}
 	return &MultiPartCopyHandler{copyId: copyId, fd: fd, nProcs: nProcs,
 		chunkCopyJobQ: chunkUploadQ, chunkCopyResultQ: chunkUploadResultQ,
-		network: network, address: address, chunkList:chunks}
+		network: network, address: address, chunkList: chunks}
 }
 
 func (muh *MultiPartCopyHandler) Handle() error {
@@ -77,7 +77,7 @@ func (muh *MultiPartCopyHandler) Handle() error {
 	for w := 1; w <= muh.nProcs; w++ {
 		go muh.worker(w)
 	}
-	for _,chunkJob := range muh.chunkList {
+	for _, chunkJob := range muh.chunkList {
 		muh.chunkCopyJobQ <- chunkJob
 	}
 	for chunkResult := range muh.chunkCopyResultQ {
@@ -86,11 +86,11 @@ func (muh *MultiPartCopyHandler) Handle() error {
 		} else {
 			totalChunksFailed = totalChunksFailed + 1
 		}
-		if totalChunksSuccessful + totalChunksFailed >= uint64(len(muh.chunkList)) {
+		if totalChunksSuccessful+totalChunksFailed >= uint64(len(muh.chunkList)) {
 			break
 		}
 	}
-	fmt.Printf("Successfully copied %d chunks out of %d \n",totalChunksSuccessful, totalChunksSuccessful+totalChunksFailed)
+	fmt.Printf("Successfully copied %d chunks out of %d \n", totalChunksSuccessful, totalChunksSuccessful+totalChunksFailed)
 	close(muh.chunkCopyJobQ)
 	close(muh.chunkCopyResultQ)
 	return nil
@@ -112,7 +112,7 @@ func (muh *MultiPartCopyHandler) worker(workerId int) {
 		if err != nil {
 			os.Exit(1)
 		}
-		conn.Write(protocol.PrepareMultiPartCopyPartOpHeader(chunk.partNum, muh.copyId,chunk.chunkSize))
+		conn.Write(protocol.PrepareMultiPartCopyPartOpHeader(chunk.partNum, muh.copyId, chunk.chunkSize))
 		conn.Write(buffer)
 		bR := make([]byte, protocol.NumHeaderBytes)
 		conn.Read(bR)
@@ -121,12 +121,12 @@ func (muh *MultiPartCopyHandler) worker(workerId int) {
 		case protocol.SingleCopySuccessResponseType:
 			nsr := protocol.NewSingleCopySuccessResponseOp(bR)
 			if nsr.GetCsum() == returnMD5String {
-				muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum,SUCCESSFUL}
+				muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, SUCCESSFUL}
 			} else {
-				muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum,FAILED}
+				muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
 			}
 		default:
-			muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum,FAILED}
+			muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
 		}
 	}
 }

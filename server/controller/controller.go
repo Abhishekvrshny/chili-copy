@@ -13,8 +13,8 @@ import (
 )
 
 type ChiliController struct {
-	acceptedConns  chan net.Conn
-	onGoingCopyOps sync.Map
+	acceptedConns      chan net.Conn
+	onGoingCopyOps     sync.Map
 	onGoingMultiCopies sync.Map
 }
 
@@ -44,7 +44,7 @@ func (cc *ChiliController) handleConnection() {
 			fmt.Println("Zero length received, connection closed by client")
 			continue
 		}
-		if len !=0 && err != nil {
+		if len != 0 && err != nil {
 			fmt.Println(err.Error())
 			os.Exit(3)
 		}
@@ -82,18 +82,18 @@ func (cc *ChiliController) handleConnection() {
 				opHandle := writer.MultiPartCopyHandler{Conn: conn, CopyOp: mpo}
 				//TODO: surround with a lock
 				cc.onGoingCopyOps.Store(mpo.GetFilePath(), opHandle)
-				cc.onGoingMultiCopies.Store(mpo.GetCopyId().String(),opHandle)
+				cc.onGoingMultiCopies.Store(mpo.GetCopyId().String(), opHandle)
 				//TODO: surround with a lock
 				mpo.SetState(protocol.INITIATED)
-				fmt.Println("Initiated multipart copy with Id ",mpo.GetCopyId().String())
+				fmt.Println("Initiated multipart copy with Id ", mpo.GetCopyId().String())
 				multiPartCopyInitSuccessResponse(mpo.GetCopyId(), conn)
 			}
 		case protocol.MultiPartCopyPartRequestOpType:
-			copyId,_ := protocol.ParseCopyId(b)
-			fmt.Println("Received multipart copy part req with Id ",copyId)
-			_,ok := cc.onGoingMultiCopies.Load(copyId)
+			copyId, _ := protocol.ParseCopyId(b)
+			fmt.Println("Received multipart copy part req with Id ", copyId)
+			_, ok := cc.onGoingMultiCopies.Load(copyId)
 			if ok {
-				mcp,tmpDir := protocol.NewMultiPartCopyPartOp(b,copyId)
+				mcp, tmpDir := protocol.NewMultiPartCopyPartOp(b, copyId)
 				opHandle := writer.SingleCopyHandler{Conn: conn, Md5: md5.New(), CopyOp: mcp}
 				opHandle.CreateDir(tmpDir)
 				csum, err := opHandle.Handle()
@@ -105,7 +105,7 @@ func (cc *ChiliController) handleConnection() {
 					conn.Close()
 					return
 				}
-				fmt.Println("Success response, csum",csum)
+				fmt.Println("Success response, csum", csum)
 				singleCopySuccessResponse(csum, conn)
 				conn.Close()
 			} else {

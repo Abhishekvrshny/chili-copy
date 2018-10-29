@@ -15,6 +15,7 @@ const (
 	network = "tcp"
 	address = ":5678"
 )
+
 func main() {
 	fmt.Println("starting chili-copy server")
 	cc := controller.NewChiliController()
