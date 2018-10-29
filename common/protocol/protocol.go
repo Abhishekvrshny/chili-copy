@@ -3,8 +3,6 @@ package protocol
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
-
 	"github.com/google/uuid"
 	"strconv"
 )
@@ -101,7 +99,6 @@ func (mco *MultiPartCopyOp) GetState() MultiPartOpState {
 }
 
 func NewSingleCopySuccessResponseOp(b []byte) *SingleCopySuccessResponseOp {
-	fmt.Println(b)
 	return &SingleCopySuccessResponseOp{hex.EncodeToString(b[2 : 2+16])}
 }
 

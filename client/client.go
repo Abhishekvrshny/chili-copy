@@ -60,7 +60,6 @@ func singleCopy(localFile string, remoteFile string, conn net.Conn, fileSize uin
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	fmt.Println(string(b[:]))
 	conn.Write(b)
 	bR := make([]byte, protocol.NumHeaderBytes)
 	conn.Read(bR)
@@ -89,6 +88,9 @@ func multiPartCopy(localFile string, remoteFile string, conn net.Conn, fileSize 
 		fmt.Println("copyId received is ", mir.GetUuid().String())
 		muh := multipart.NewMultiPartCopyHandler(mir.GetUuid(), localFile, 500, 20, network, address)
 		defer muh.Close()
-		muh.Handle()
+		err = muh.Handle()
+		if err != nil {
+
+		}
 	}
 }
