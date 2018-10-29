@@ -33,10 +33,6 @@ func sendToServer() {
 		fmt.Println(err)
 		return
 	}
-	conn, err := net.Dial(network, address)
-	if err != nil {
-		os.Exit(1)
-	}
 	hash := md5.New()
 	if _, err := io.Copy(hash, fd); err != nil {
 		os.Exit(1)
@@ -45,15 +41,16 @@ func sendToServer() {
 	returnMD5String := hex.EncodeToString(hashInBytes)
 	fileSize := common.FileSize(fd)
 	if fileSize < 1000 {
-		singleCopy(localFile, remoteFile, conn, uint32(fileSize), returnMD5String)
+		singleCopy(localFile, remoteFile, uint64(fileSize), returnMD5String)
 	} else {
-		multiPartCopy(localFile, remoteFile, conn, fileSize, returnMD5String)
-		//singleCopy(localFile,remoteFile, conn, uint32(fileSize), returnMD5String)
+		multiPartCopy(localFile, remoteFile, uint64(fileSize), returnMD5String)
+		//singleCopy(localFile,remoteFile, uint64(fileSize), returnMD5String)
 	}
 
 }
 
-func singleCopy(localFile string, remoteFile string, conn net.Conn, fileSize uint32, returnMD5String string) {
+func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string) {
+	conn := GetConnection(network,address)
 	conn.Write(protocol.PrepareSingleCopyOpHeader(remoteFile, fileSize))
 	b, err := ioutil.ReadFile(localFile)
 	if err != nil {
@@ -67,14 +64,15 @@ func singleCopy(localFile string, remoteFile string, conn net.Conn, fileSize uin
 	switch opType {
 	case protocol.SingleCopySuccessResponseType:
 		nsr := protocol.NewSingleCopySuccessResponseOp(bR)
-		if nsr.GetMd5() == returnMD5String {
+		if nsr.GetCsum() == returnMD5String {
 			fmt.Println("Successfully copied file")
 		}
 	}
 }
 
-func multiPartCopy(localFile string, remoteFile string, conn net.Conn, fileSize int, returnMD5String string) {
-	b := protocol.PrepareMultiPartInitOpHeader(remoteFile, fileSize)
+func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string) {
+	conn := GetConnection(network,address)
+	b := protocol.PrepareMultiPartInitOpHeader(remoteFile)
 	conn.Write(b)
 	bR := make([]byte, protocol.NumHeaderBytes)
 	conn.Read(bR)
@@ -85,12 +83,24 @@ func multiPartCopy(localFile string, remoteFile string, conn net.Conn, fileSize 
 		if err != nil {
 			os.Exit(1)
 		}
-		fmt.Println("copyId received is ", mir.GetUuid().String())
-		muh := multipart.NewMultiPartCopyHandler(mir.GetUuid(), localFile, 500, 20, network, address)
+		fmt.Println("copyId received is ", mir.GetCopyId().String())
+		muh := multipart.NewMultiPartCopyHandler(mir.GetCopyId(), localFile, 500, 20, network, address)
 		defer muh.Close()
 		err = muh.Handle()
 		if err != nil {
-
+			os.Exit(1)
 		}
+		//nConn := GetConnection(network,address)
+		//b := protocol.PrepareMultiPartCompleteOpHeader(mir.GetCopyId(),fileSize)
+
+
 	}
+}
+
+func GetConnection(network string, address string) net.Conn {
+	conn, err := net.Dial(network, address)
+	if err != nil {
+		os.Exit(1)
+	}
+	return conn
 }

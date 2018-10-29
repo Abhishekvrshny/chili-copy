@@ -40,12 +40,11 @@ func (sc *SingleCopyHandler) Handle() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		fmt.Println("content read", b)
 		err = sc.createOrAppendFile(b[:len])
 		if err != nil {
 			return nil, err
 		}
-		toBeRead = toBeRead - uint32(len)
+		toBeRead = toBeRead - uint64(len)
 	}
 
 	return sc.Md5.Sum(nil), nil

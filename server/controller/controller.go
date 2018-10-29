@@ -40,10 +40,13 @@ func (cc *ChiliController) handleConnection() {
 	for conn := range cc.acceptedConns {
 		b := make([]byte, protocol.NumHeaderBytes)
 		len, err := conn.Read(b)
-		fmt.Println(len)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+		if len == 0 {
+			fmt.Println("Zero length received, connection closed by client")
+			continue
+		}
+		if len !=0 && err != nil {
+			fmt.Println(err.Error())
+			os.Exit(3)
 		}
 		opType := protocol.GetOp(b)
 		switch opType {
@@ -119,7 +122,7 @@ func singleCopySuccessResponse(csum []byte, conn net.Conn) {
 		len, err := conn.Write(payload)
 		if err != nil {
 			fmt.Println("Error sending success response")
-			os.Exit(1)
+			os.Exit(4)
 		}
 		toBeWritten = toBeWritten - len
 	}
@@ -136,7 +139,7 @@ func multiPartCopyInitSuccessResponse(copyId uuid.UUID, conn net.Conn) {
 		len, err := conn.Write(payload)
 		if err != nil {
 			fmt.Println("Error sending success response")
-			os.Exit(1)
+			os.Exit(5)
 		}
 		toBeWritten = toBeWritten - len
 	}

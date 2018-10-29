@@ -7,7 +7,7 @@ import (
 	"strconv"
 )
 
-const NumHeaderBytes = 262
+const NumHeaderBytes = 512
 
 type OpType int
 
@@ -34,7 +34,7 @@ type CopyOp interface {
 
 type SingleCopyOp struct {
 	filePath      string
-	contentLength uint32
+	contentLength uint64
 }
 
 type MultiPartOpState int
@@ -62,9 +62,9 @@ type MultiPartCopyInitSuccessResponseOp struct {
 
 func NewSingleCopyOp(b []byte) *SingleCopyOp {
 	//TODO : fix endian, taking little for my machine
-	contentLength := binary.LittleEndian.Uint32(b[2:6])
-	pathLen := uint8(b[6])
-	return &SingleCopyOp{string(b[7 : 7+pathLen]), contentLength}
+	contentLength := binary.LittleEndian.Uint64(b[2:10])
+	pathLen := uint8(b[10])
+	return &SingleCopyOp{string(b[11 : 11+pathLen]), contentLength}
 }
 
 
@@ -72,7 +72,7 @@ func NewMultiPartCopyPartOp(b []byte,copyId string) (*SingleCopyOp,string) {
 	//TODO : fix endian, taking little for my machine
 	partNum := binary.LittleEndian.Uint64(b[2+16:2+16+8])
 	partNumStr := strconv.FormatUint(partNum, 10)
-	contentLength := binary.LittleEndian.Uint32(b[2+16+8:2+16+8+4])
+	contentLength := binary.LittleEndian.Uint64(b[2+16+8:2+16+8+8])
 	return &SingleCopyOp{"/tmp/"+copyId+"/"+partNumStr, contentLength},"/tmp/"+copyId
 }
 
@@ -110,15 +110,15 @@ func NewMultiPartCopyInitSuccessResponseOp(b []byte) (*MultiPartCopyInitSuccessR
 	return &MultiPartCopyInitSuccessResponseOp{uuid}, nil
 }
 
-func (nsr *SingleCopySuccessResponseOp) GetMd5() string {
+func (nsr *SingleCopySuccessResponseOp) GetCsum() string {
 	return nsr.Md5
 }
 
-func (nmir *MultiPartCopyInitSuccessResponseOp) GetUuid() uuid.UUID {
+func (nmir *MultiPartCopyInitSuccessResponseOp) GetCopyId() uuid.UUID {
 	return nmir.copyId
 }
 
-func (sco *SingleCopyOp) GetContentLength() uint32 {
+func (sco *SingleCopyOp) GetContentLength() uint64 {
 	return sco.contentLength
 }
 
@@ -160,10 +160,10 @@ func GetMultiPartCopyInitSuccessOp(copyId uuid.UUID) []byte {
 	return bytes
 }
 
-func PrepareSingleCopyOpHeader(remoteFile string, fileSize uint32) []byte {
+func PrepareSingleCopyOpHeader(remoteFile string, fileSize uint64) []byte {
 	bytes := make([]byte, NumHeaderBytes)
-	contLen := make([]byte, 4)
-	binary.LittleEndian.PutUint32(contLen, fileSize)
+	contLen := make([]byte, 8)
+	binary.LittleEndian.PutUint64(contLen, fileSize)
 
 	header := []byte(singleCopyRequestOpCode)
 	header = append(header, contLen...)
@@ -173,7 +173,18 @@ func PrepareSingleCopyOpHeader(remoteFile string, fileSize uint32) []byte {
 	copy(bytes[:], header)
 	return bytes
 }
-func PrepareMultiPartInitOpHeader(remoteFile string, fileSize int) []byte {
+func PrepareMultiPartInitOpHeader(remoteFile string) []byte {
+	bytes := make([]byte, NumHeaderBytes)
+
+	header := []byte(multiPartInitRequestOpCode)
+	header = append(header, byte(uint8(len(remoteFile))))
+	header = append(header, []byte(remoteFile)...)
+
+	copy(bytes[:], header)
+	return bytes
+}
+
+func PrepareMultiPartCompleteOpHeader(remoteFile string) []byte {
 	bytes := make([]byte, NumHeaderBytes)
 
 	header := []byte(multiPartInitRequestOpCode)

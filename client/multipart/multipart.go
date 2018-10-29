@@ -120,7 +120,7 @@ func (muh *MultiPartCopyHandler) worker(workerId int) {
 		switch opType {
 		case protocol.SingleCopySuccessResponseType:
 			nsr := protocol.NewSingleCopySuccessResponseOp(bR)
-			if nsr.GetMd5() == returnMD5String {
+			if nsr.GetCsum() == returnMD5String {
 				muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum,SUCCESSFUL}
 			} else {
 				muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum,FAILED}
