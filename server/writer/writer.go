@@ -3,8 +3,11 @@ package writer
 import (
 	"fmt"
 	"hash"
+	"io"
 	"net"
 	"os"
+	"strconv"
+	"sync/atomic"
 
 	"github.com/chili-copy/common/protocol"
 )
@@ -17,10 +20,46 @@ type SingleCopyHandler struct {
 }
 
 type MultiPartCopyHandler struct {
-	Conn   net.Conn
-	fd     *os.File
-	Md5    hash.Hash
-	CopyOp *protocol.MultiPartCopyOp
+	CopyOp           *protocol.MultiPartCopyOp
+	TotalPartsCopied uint64
+}
+
+func (mpc *MultiPartCopyHandler) IncreaseTotalPartsCopiedByOne() {
+	atomic.AddUint64(&mpc.TotalPartsCopied, 1)
+}
+
+func (mpc *MultiPartCopyHandler) StitchChunks() {
+	fout, err := os.OpenFile(mpc.CopyOp.GetFilePath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Println("error in MultiPartCopyHandler StitchChunks() : %s", err.Error())
+		os.Exit(88)
+	}
+	defer fout.Close()
+	fout.Truncate(0)
+	for num := uint64(1); num <= mpc.TotalPartsCopied; num++ {
+		path := "/tmp/" + mpc.CopyOp.GetCopyId().String() + "/" + strconv.FormatUint(num, 10)
+		fmt.Println("path is ", num)
+		fin, err := os.Open(path)
+		fmt.Println("stitching path ", path)
+		if err != nil {
+			fmt.Println("Error in MultiPartCopyHandler opening chunk ", err.Error())
+			os.Exit(94)
+
+		}
+		defer fin.Close()
+		_, err = io.Copy(fout, fin)
+		if err != nil {
+			fmt.Println("error in Write ", err.Error())
+			os.Exit(99)
+		}
+		fin.Close()
+		if err := os.Remove(path); err != nil {
+			fmt.Println("Error removing chunk")
+		}
+	}
+	if err := os.Remove("/tmp/" + mpc.CopyOp.GetCopyId().String()); err != nil {
+		fmt.Println("Error removing chunk")
+	}
 }
 
 func (sc *SingleCopyHandler) Handle() ([]byte, error) {
@@ -48,7 +87,6 @@ func (sc *SingleCopyHandler) Handle() ([]byte, error) {
 	}
 
 	return sc.Md5.Sum(nil), nil
-	//return hash.Sum(nil), nil
 }
 
 func (sc *SingleCopyHandler) CreateDir(path string) {

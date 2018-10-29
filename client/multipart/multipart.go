@@ -44,6 +44,10 @@ type chunkUploadResult struct {
 	status  chunkUploadStatus
 }
 
+func (muh *MultiPartCopyHandler) GetNumParts() int {
+	return len(muh.chunkList)
+}
+
 func NewMultiPartCopyHandler(copyId uuid.UUID, localFile string, chunkSize int, nProcs int, network string, address string) *MultiPartCopyHandler {
 	fd, err := os.Open(localFile)
 	if err != nil {

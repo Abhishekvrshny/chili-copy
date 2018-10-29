@@ -58,7 +58,7 @@ func (cc *ChiliController) handleConnection() {
 				conn.Close()
 				return
 			} else {
-				opHandle := writer.SingleCopyHandler{Conn: conn, Md5: md5.New(), CopyOp: sco}
+				opHandle := &writer.SingleCopyHandler{Conn: conn, Md5: md5.New(), CopyOp: sco}
 				cc.onGoingCopyOps.Store(sco.GetFilePath(), opHandle)
 				csum, err := opHandle.Handle()
 				if err != nil {
@@ -79,18 +79,18 @@ func (cc *ChiliController) handleConnection() {
 				conn.Close()
 				return
 			} else {
-				opHandle := writer.MultiPartCopyHandler{Conn: conn, CopyOp: mpo}
+				opHandle := &writer.MultiPartCopyHandler{mpo, uint64(0)}
 				//TODO: surround with a lock
 				cc.onGoingCopyOps.Store(mpo.GetFilePath(), opHandle)
 				cc.onGoingMultiCopies.Store(mpo.GetCopyId().String(), opHandle)
 				//TODO: surround with a lock
 				mpo.SetState(protocol.INITIATED)
-				fmt.Println("Initiated multipart copy with Id ", mpo.GetCopyId().String())
+				fmt.Println("Initiated multipart copy with copyId ", mpo.GetCopyId().String())
 				multiPartCopyInitSuccessResponse(mpo.GetCopyId(), conn)
 			}
 		case protocol.MultiPartCopyPartRequestOpType:
 			copyId, _ := protocol.ParseCopyId(b)
-			fmt.Println("Received multipart copy part req with Id ", copyId)
+			fmt.Println("Received multipart copy part req with copyId ", copyId)
 			_, ok := cc.onGoingMultiCopies.Load(copyId)
 			if ok {
 				mcp, tmpDir := protocol.NewMultiPartCopyPartOp(b, copyId)
@@ -105,6 +105,8 @@ func (cc *ChiliController) handleConnection() {
 					conn.Close()
 					return
 				}
+				mcop, _ := cc.onGoingMultiCopies.Load(copyId)
+				mcop.(*writer.MultiPartCopyHandler).IncreaseTotalPartsCopiedByOne()
 				fmt.Println("Success response, csum", csum)
 				singleCopySuccessResponse(csum, conn)
 				conn.Close()
@@ -112,6 +114,18 @@ func (cc *ChiliController) handleConnection() {
 				singleCopyErrorResponse(err, conn)
 				conn.Close()
 			}
+		case protocol.MultiPartCopyCompleteOpType:
+			copyId, _ := protocol.ParseCopyId(b)
+			fmt.Println("Received multipart copy complete req with copyId ", copyId)
+			opHandle, ok := cc.onGoingMultiCopies.Load(copyId)
+			if ok {
+				opHandle.(*writer.MultiPartCopyHandler).StitchChunks()
+				conn.Close()
+			} else {
+				singleCopyErrorResponse(err, conn)
+				conn.Close()
+			}
+
 		}
 	}
 }

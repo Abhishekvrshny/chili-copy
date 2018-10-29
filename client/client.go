@@ -50,6 +50,7 @@ func sendToServer() {
 }
 
 func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string) {
+	fmt.Printf("Request : single copy : %s to %s:%s : size=%d, csum=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
 	conn := GetConnection(network, address)
 	conn.Write(protocol.PrepareSingleCopyOpHeader(remoteFile, fileSize))
 	b, err := ioutil.ReadFile(localFile)
@@ -65,7 +66,7 @@ func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5S
 	case protocol.SingleCopySuccessResponseType:
 		nsr := protocol.NewSingleCopySuccessResponseOp(bR)
 		if nsr.GetCsum() == returnMD5String {
-			fmt.Println("Successfully copied file")
+			fmt.Printf("Response : Successfully copied : %s to %s:%s : size=%d, csum=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
 		}
 	}
 }
@@ -90,8 +91,9 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 		if err != nil {
 			os.Exit(1)
 		}
-		//nConn := GetConnection(network,address)
-		//b := protocol.PrepareMultiPartCompleteOpHeader(mir.GetCopyId(),fileSize)
+		nConn := GetConnection(network, address)
+		b := protocol.PrepareMultiPartCompleteOpHeader(mir.GetCopyId(), fileSize)
+		nConn.Write(b)
 
 	}
 }

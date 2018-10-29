@@ -18,6 +18,7 @@ const (
 	MultiPartCopyInitOpType
 	MultiPartCopyInitSuccessResponseOpType
 	MultiPartCopyPartRequestOpType
+	MultiPartCopyCompleteOpType
 	Unknown
 )
 const (
@@ -26,6 +27,7 @@ const (
 	multiPartInitRequestOpCode         = "MI"
 	multiPartInitSuccessResponseOpCode = "MS"
 	multiPartCopyPartRequestOpCode     = "MC"
+	multiPartCompleteRequestOpCode     = "MT"
 )
 
 type CopyOp interface {
@@ -138,6 +140,8 @@ func GetOp(b []byte) OpType {
 		return MultiPartCopyInitSuccessResponseOpType
 	case multiPartCopyPartRequestOpCode:
 		return MultiPartCopyPartRequestOpType
+	case multiPartCompleteRequestOpCode:
+		return MultiPartCopyCompleteOpType
 	default:
 		return Unknown
 	}
@@ -184,12 +188,15 @@ func PrepareMultiPartInitOpHeader(remoteFile string) []byte {
 	return bytes
 }
 
-func PrepareMultiPartCompleteOpHeader(remoteFile string) []byte {
+func PrepareMultiPartCompleteOpHeader(copyId uuid.UUID, fileSize uint64) []byte {
 	bytes := make([]byte, NumHeaderBytes)
+	fSize := make([]byte, 8)
+	binary.LittleEndian.PutUint64(fSize, fileSize)
 
-	header := []byte(multiPartInitRequestOpCode)
-	header = append(header, byte(uint8(len(remoteFile))))
-	header = append(header, []byte(remoteFile)...)
+	header := []byte(multiPartCompleteRequestOpCode)
+	cId, _ := copyId.MarshalBinary()
+	header = append(header, cId...)
+	header = append(header, fSize...)
 
 	copy(bytes[:], header)
 	return bytes
