@@ -8,14 +8,19 @@ import (
 	"github.com/chili-copy/server/controller"
 )
 
-//var acceptedConns chan net.Conn
-
+const (
+	AcceptedConnQSize = 20
+)
+const (
+	network = "tcp"
+	address = ":5678"
+)
 func main() {
 	fmt.Println("starting chili-copy server")
 	cc := controller.NewChiliController()
-	cc.MakeAcceptedConnQ(20)
-	cc.CreateAcceptedConnHandlers(20)
-	startChiliServer(cc, "tcp", ":5678")
+	cc.MakeAcceptedConnQ(AcceptedConnQSize)
+	cc.CreateAcceptedConnHandlers(AcceptedConnQSize)
+	startChiliServer(cc, network, address)
 }
 
 func startChiliServer(cc *controller.ChiliController, network string, port string) {

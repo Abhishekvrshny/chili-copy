@@ -45,15 +45,15 @@ func sendToServer() {
 	returnMD5String := hex.EncodeToString(hashInBytes)
 	fileSize := common.FileSize(fd)
 	if fileSize < 1000 {
-		singleCopy(localFile, remoteFile, conn, fileSize, returnMD5String)
+		singleCopy(localFile, remoteFile, conn, uint32(fileSize), returnMD5String)
 	} else {
 		multiPartCopy(localFile, remoteFile, conn, fileSize, returnMD5String)
-		//singleCopy(localFile,remoteFile, conn, fileSize, returnMD5String)
+		//singleCopy(localFile,remoteFile, conn, uint32(fileSize), returnMD5String)
 	}
 
 }
 
-func singleCopy(localFile string, remoteFile string, conn net.Conn, fileSize int, returnMD5String string) {
+func singleCopy(localFile string, remoteFile string, conn net.Conn, fileSize uint32, returnMD5String string) {
 	conn.Write(protocol.PrepareSingleCopyOpHeader(remoteFile, fileSize))
 	b, err := ioutil.ReadFile(localFile)
 	if err != nil {
@@ -86,8 +86,9 @@ func multiPartCopy(localFile string, remoteFile string, conn net.Conn, fileSize 
 		if err != nil {
 			os.Exit(1)
 		}
-		fmt.Println("copyId received is ", mir.GetUuid())
+		fmt.Println("copyId received is ", mir.GetUuid().String())
 		muh := multipart.NewMultiPartCopyHandler(mir.GetUuid(), localFile, 500, 20, network, address)
+		defer muh.Close()
 		muh.Handle()
 	}
 }

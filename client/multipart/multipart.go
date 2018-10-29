@@ -9,6 +9,9 @@ import (
 
 	"github.com/chili-copy/common"
 	"github.com/chili-copy/common/protocol"
+	"github.com/google/uuid"
+	"crypto/md5"
+	"encoding/hex"
 )
 
 type chunkUploadStatus int
@@ -19,7 +22,7 @@ const (
 )
 
 type MultiPartCopyHandler struct {
-	copyId             string
+	copyId             uuid.UUID
 	fd                 *os.File
 	nProcs             int
 	chunkUploadQ       chan *chunkMeta
@@ -32,7 +35,7 @@ type MultiPartCopyHandler struct {
 type chunkMeta struct {
 	partNum   uint64
 	offset    int64
-	chunkSize int
+	chunkSize uint32
 	md5       hash.Hash
 	conn      net.Conn
 }
@@ -42,7 +45,7 @@ type chunkUploadResult struct {
 	status  chunkUploadStatus
 }
 
-func NewMultiPartCopyHandler(copyId string, localFile string, chunkSize int, nProcs int, network string, address string) *MultiPartCopyHandler {
+func NewMultiPartCopyHandler(copyId uuid.UUID, localFile string, chunkSize int, nProcs int, network string, address string) *MultiPartCopyHandler {
 	fd, err := os.Open(localFile)
 	if err != nil {
 		os.Exit(1)
@@ -52,13 +55,13 @@ func NewMultiPartCopyHandler(copyId string, localFile string, chunkSize int, nPr
 	fmt.Println("total fileSize  ", fileSize)
 	fmt.Println("total totalPartsNum  ", totalPartsNum)
 	offset := int64(0)
-	partSize := 0
+	partSize := uint32(0)
 	chunkUploadQ := make(chan *chunkMeta, totalPartsNum)
 	chunkUploadResultQ := make(chan *chunkUploadResult, totalPartsNum)
 
 	for i := uint64(0); i < totalPartsNum; i++ {
 		offset = offset + int64(partSize)
-		partSize = int(math.Min(float64(chunkSize), float64(int64(fileSize)-int64(i*uint64(chunkSize)))))
+		partSize = uint32(math.Min(float64(chunkSize), float64(int64(fileSize)-int64(i*uint64(chunkSize)))))
 		conn, err := net.Dial(network, address)
 		if err != nil {
 			os.Exit(1)
@@ -76,11 +79,27 @@ func (muh *MultiPartCopyHandler) Handle() {
 	for chunk := range muh.chunkUploadQ {
 		buffer := make([]byte, chunk.chunkSize)
 		_, err := muh.fd.ReadAt(buffer, chunk.offset)
+		digest := md5.New()
+		digest.Write(buffer)
+		hash := digest.Sum(nil)
+		returnMD5String := hex.EncodeToString(hash)
 		if err != nil {
 			os.Exit(1)
 		}
-		fmt.Println("asa")
-		chunk.conn.Write(protocol.PrepareMultiPartCopyPartOpHeader(chunk.partNum, muh.copyId))
+		chunk.conn.Write(protocol.PrepareMultiPartCopyPartOpHeader(chunk.partNum, muh.copyId,chunk.chunkSize))
 		chunk.conn.Write(buffer)
+		bR := make([]byte, protocol.NumHeaderBytes)
+		chunk.conn.Read(bR)
+		opType := protocol.GetOp(bR)
+		switch opType {
+		case protocol.SingleCopySuccessResponseType:
+			nsr := protocol.NewSingleCopySuccessResponseOp(bR)
+			if nsr.GetMd5() == returnMD5String {
+				fmt.Println("Successfully copied part")
+			}
+		}
 	}
+}
+func (muh *MultiPartCopyHandler) Close() {
+	muh.fd.Close()
 }

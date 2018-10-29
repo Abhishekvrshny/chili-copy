@@ -23,14 +23,11 @@ type MultiPartCopyHandler struct {
 	CopyOp *protocol.MultiPartCopyOp
 }
 
-func (sc *MultiPartCopyHandler) Handle() (string, error) {
-	return sc.CopyOp.GetCopyId(), nil
-}
-
 func (sc *SingleCopyHandler) Handle() ([]byte, error) {
 	b := make([]byte, 4096)
 	f, err := os.OpenFile(sc.CopyOp.GetFilePath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
+		fmt.Println("error in SingleCopyHandler Handle() : %s",err.Error())
 		return nil, err
 	}
 	sc.fd = f
@@ -53,6 +50,12 @@ func (sc *SingleCopyHandler) Handle() ([]byte, error) {
 
 	return sc.Md5.Sum(nil), nil
 	//return hash.Sum(nil), nil
+}
+
+func (sc *SingleCopyHandler) CreateDir(path string) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		os.Mkdir(path, os.ModePerm)
+	}
 }
 
 func (sc *SingleCopyHandler) createOrAppendFile(b []byte) error {
