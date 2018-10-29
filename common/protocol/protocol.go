@@ -32,11 +32,6 @@ const (
 	multiPartCopySuccessResponseOpCode = "MM"
 )
 
-type CopyOp interface {
-	GetFilePath() string
-	GetContentLength() uint32
-}
-
 type SingleCopyOp struct {
 	filePath      string
 	contentLength uint64
