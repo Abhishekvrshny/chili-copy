@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"encoding/hex"
+	"bytes"
 )
 
 const NumHeaderBytes = 512
@@ -160,66 +161,49 @@ func NewMultiPartCopyPartOp(b []byte, copyId string, scratchDir string) *SingleC
 
 
 func PrepareSingleCopySuccessResponseOpHeader(csum []byte) []byte {
-	bytes := make([]byte, NumHeaderBytes)
-	header := []byte(singleCopySuccessResponseOpCode)
-	header = append(header, csum...)
-	copy(bytes[:], header)
-	return bytes
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, []byte(singleCopySuccessResponseOpCode))
+	binary.Write(buf, binary.LittleEndian, csum)
+	return buf.Bytes()
 }
 
 func PrepareMultiPartCopySuccessResponseOpHeader(csum []byte) []byte {
-	bytes := make([]byte, NumHeaderBytes)
-	header := []byte(multiPartCopySuccessResponseOpCode)
-	header = append(header, csum...)
-	copy(bytes[:], header)
-	return bytes
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, []byte(multiPartCopySuccessResponseOpCode))
+	binary.Write(buf, binary.LittleEndian, csum)
+	return buf.Bytes()
 }
 
 func PrepareMultiPartCopyInitSuccessResponseOpHeader(copyId uuid.UUID) []byte {
-	bytes := make([]byte, NumHeaderBytes)
-	header := []byte(multiPartInitSuccessResponseOpCode)
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, []byte(multiPartInitSuccessResponseOpCode))
 	binaryUuid, _ := copyId.MarshalBinary()
-	header = append(header, binaryUuid...)
-	copy(bytes[:], header)
-	return bytes
+	binary.Write(buf, binary.LittleEndian, binaryUuid)
+	return buf.Bytes()
 }
 
 func PrepareSingleCopyRequestOpHeader(remoteFile string, fileSize uint64) []byte {
-	bytes := make([]byte, NumHeaderBytes)
-	contLen := make([]byte, 8)
-	binary.LittleEndian.PutUint64(contLen, fileSize)
-
-	header := []byte(singleCopyRequestOpCode)
-	header = append(header, contLen...)
-	header = append(header, byte(uint8(len(remoteFile))))
-	header = append(header, []byte(remoteFile)...)
-
-	copy(bytes[:], header)
-	return bytes
-}
-func PrepareMultiPartInitRequestOpHeader(remoteFile string) []byte {
-	bytes := make([]byte, NumHeaderBytes)
-
-	header := []byte(multiPartInitRequestOpCode)
-	header = append(header, byte(uint8(len(remoteFile))))
-	header = append(header, []byte(remoteFile)...)
-
-	copy(bytes[:], header)
-	return bytes
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, []byte(singleCopyRequestOpCode))
+	binary.Write(buf, binary.LittleEndian, fileSize)
+	binary.Write(buf, binary.LittleEndian, uint8(len(remoteFile)))
+	binary.Write(buf, binary.LittleEndian, []byte(remoteFile))
+	return buf.Bytes()
 }
 
-func PrepareMultiPartCompleteRequestOpHeader(copyId uuid.UUID, fileSize uint64) []byte {
-	bytes := make([]byte, NumHeaderBytes)
-	fSize := make([]byte, 8)
-	binary.LittleEndian.PutUint64(fSize, fileSize)
+func PrepareMultiPartInitRequestOpHeader(remoteFile string) []byte {	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, []byte(multiPartInitRequestOpCode))
+	binary.Write(buf, binary.LittleEndian, uint8(len(remoteFile)))
+	binary.Write(buf, binary.LittleEndian, []byte(remoteFile))
+	return buf.Bytes()
+}
 
-	header := []byte(multiPartCompleteRequestOpCode)
+func PrepareMultiPartCompleteRequestOpHeader(copyId uuid.UUID, fileSize uint64) []byte {	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, []byte(multiPartCompleteRequestOpCode))
 	cId, _ := copyId.MarshalBinary()
-	header = append(header, cId...)
-	header = append(header, fSize...)
-
-	copy(bytes[:], header)
-	return bytes
+	binary.Write(buf, binary.LittleEndian, cId)
+	binary.Write(buf, binary.LittleEndian, fileSize)
+	return buf.Bytes()
 }
 
 func PrepareMultiPartCopyPartRequestOpHeader(partNum uint64, copyId uuid.UUID, partSize uint64) []byte {
@@ -238,6 +222,7 @@ func PrepareMultiPartCopyPartRequestOpHeader(partNum uint64, copyId uuid.UUID, p
 	header = append(header, pSize...)
 
 	copy(bytes[:], header)
+
 	return bytes
 }
 

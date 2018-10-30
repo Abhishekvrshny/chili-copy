@@ -43,8 +43,8 @@ func sendToServer() {
 	if fileSize < 1000 {
 		singleCopy(localFile, remoteFile, uint64(fileSize), returnMD5String)
 	} else {
-		//multiPartCopy(localFile, remoteFile, uint64(fileSize), returnMD5String)
-		singleCopy(localFile,remoteFile, uint64(fileSize), returnMD5String)
+		multiPartCopy(localFile, remoteFile, uint64(fileSize), returnMD5String)
+		//singleCopy(localFile,remoteFile, uint64(fileSize), returnMD5String)
 	}
 
 }
