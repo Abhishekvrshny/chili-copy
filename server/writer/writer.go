@@ -23,70 +23,78 @@ type SingleCopyHandler struct {
 type MultiPartCopyHandler struct {
 	CopyOp           *protocol.MultiPartCopyOp
 	TotalPartsCopied uint64
+	ScratchDir string
 }
 
 func (mpc *MultiPartCopyHandler) IncreaseTotalPartsCopiedByOne() {
 	atomic.AddUint64(&mpc.TotalPartsCopied, 1)
 }
 
-func (mpc *MultiPartCopyHandler) StitchChunks() []byte {
+func (mpc *MultiPartCopyHandler) StitchChunks() ([]byte, error) {
 	hash := md5.New()
 	fout, err := os.OpenFile(mpc.CopyOp.GetFilePath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Println("error in MultiPartCopyHandler StitchChunks() : %s", err.Error())
-		os.Exit(88)
+		fmt.Printf("Failed to open file. Error : %s\n", err.Error())
+		return nil,err
 	}
 	defer fout.Close()
-	fout.Truncate(0)
+	err = fout.Truncate(0)
+	if err != nil {
+		fmt.Printf("Failed to truncate file. Error : %s",err.Error())
+		return nil,err
+	}
 	for num := uint64(1); num <= mpc.TotalPartsCopied; num++ {
-		path := "/tmp/" + mpc.CopyOp.GetCopyId().String() + "/" + strconv.FormatUint(num, 10)
+		path := mpc.ScratchDir + mpc.CopyOp.GetCopyId().String() + "/" + strconv.FormatUint(num, 10)
 		fin, err := os.Open(path)
 		if err != nil {
 			fmt.Println("Error in MultiPartCopyHandler opening chunk ", err.Error())
-			os.Exit(94)
-
+			return nil, err
 		}
 		defer fin.Close()
 		_, err = io.Copy(fout, fin)
 		if err != nil {
 			fmt.Println("error in Write ", err.Error())
-			os.Exit(99)
+			return nil, err
 		}
 		fin, err = os.Open(path)
 		if err != nil {
 			fmt.Println("Error in MultiPartCopyHandler opening chunk ", err.Error())
-			os.Exit(94)
-
+			return nil, err
 		}
 		defer fin.Close()
 		_, err = io.Copy(hash, fin)
 		if err != nil {
 			fmt.Println("error in Copy Hash ", err.Error())
-			os.Exit(99)
+			return nil, err
 		}
 		fin.Close()
 		if err := os.Remove(path); err != nil {
 			fmt.Println("Error removing chunk")
+			return nil, err
 		}
 	}
-	if err := os.Remove("/tmp/" + mpc.CopyOp.GetCopyId().String()); err != nil {
-		fmt.Println("Error removing chunk")
+	if err := os.Remove(mpc.ScratchDir + mpc.CopyOp.GetCopyId().String()); err != nil {
+		fmt.Println("Error removing tmp dir")
+		return nil, err
 	}
-	return hash.Sum(nil)
+	return hash.Sum(nil), nil
 }
 
 func (sc *SingleCopyHandler) Handle() ([]byte, error) {
 	b := make([]byte, 4096)
 	f, err := os.OpenFile(sc.CopyOp.GetFilePath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Println("error in SingleCopyHandler Handle() : %s", err.Error())
+		fmt.Printf("error in SingleCopyHandler Handle() : %s\n", err.Error())
 		return nil, err
 	}
 	sc.fd = f
 	defer sc.fd.Close()
-	f.Truncate(0)
+	err = f.Truncate(0)
+	if err != nil {
+		fmt.Printf("Failed to truncate file. Error : %s\n",err.Error())
+		return nil,err
+	}
 	toBeRead := sc.CopyOp.GetContentLength()
-
 	for toBeRead > 0 {
 		len, err := sc.Conn.Read(b)
 		if err != nil {

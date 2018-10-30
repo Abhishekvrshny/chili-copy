@@ -111,7 +111,6 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
 	b := protocol.PrepareMultiPartInitRequestOpHeader(remoteFile)
 	err = common.SendBytesToServer(conn,b)
 	if err != nil {
@@ -141,7 +140,6 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 		if err != nil {
 			return err
 		}
-		defer nConn.Close()
 		b := protocol.PrepareMultiPartCompleteRequestOpHeader(mir.GetCopyId(), fileSize)
 		err = common.SendBytesToServer(nConn,b)
 		if err != nil {

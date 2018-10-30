@@ -76,7 +76,7 @@ func (cc *ChiliController) handleConnection() {
 				conn.Close()
 				return
 			} else {
-				opHandle := &writer.MultiPartCopyHandler{mpo, uint64(0)}
+				opHandle := &writer.MultiPartCopyHandler{mpo, uint64(0), scratchDir}
 				//TODO: surround with a lock
 				cc.onGoingCopyOpsByPath.Store(mpo.GetFilePath(), opHandle)
 				cc.onGoingMultiCopiesByIds.Store(mpo.GetCopyId().String(), opHandle)
@@ -115,7 +115,10 @@ func (cc *ChiliController) handleConnection() {
 			fmt.Println("Received multipart copy complete req with copyId ", copyId)
 			opHandle, ok := cc.onGoingMultiCopiesByIds.Load(copyId)
 			if ok {
-				hash := opHandle.(*writer.MultiPartCopyHandler).StitchChunks()
+				hash, err := opHandle.(*writer.MultiPartCopyHandler).StitchChunks()
+				if err != nil {
+
+				}
 				fmt.Println("successfully written multipart copy with csum ", hex.EncodeToString(hash))
 				cc.onGoingMultiCopiesByIds.Delete(copyId)
 				cc.onGoingCopyOpsByPath.Delete(opHandle.(*writer.MultiPartCopyHandler).CopyOp.GetFilePath())
