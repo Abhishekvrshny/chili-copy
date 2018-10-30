@@ -209,13 +209,13 @@ func PrepareMultiPartCompleteOpHeader(copyId uuid.UUID, fileSize uint64) []byte 
 	return bytes
 }
 
-func PrepareMultiPartCopyPartOpHeader(partNum uint64, copyId uuid.UUID, partSize uint32) []byte {
+func PrepareMultiPartCopyPartOpHeader(partNum uint64, copyId uuid.UUID, partSize uint64) []byte {
 	bytes := make([]byte, NumHeaderBytes)
 	pNum := make([]byte, 8)
 	binary.LittleEndian.PutUint64(pNum, partNum)
 
-	pSize := make([]byte, 4)
-	binary.LittleEndian.PutUint32(pSize, partSize)
+	pSize := make([]byte, 8)
+	binary.LittleEndian.PutUint64(pSize, partSize)
 
 	cId, _ := copyId.MarshalBinary()
 

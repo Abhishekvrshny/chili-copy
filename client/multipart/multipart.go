@@ -35,7 +35,7 @@ type MultiPartCopyHandler struct {
 type chunkMeta struct {
 	partNum   uint64
 	offset    int64
-	chunkSize uint32
+	chunkSize uint64
 	md5       hash.Hash
 }
 
@@ -58,7 +58,7 @@ func NewMultiPartCopyHandler(copyId uuid.UUID, localFile string, chunkSize int, 
 	fmt.Println("total fileSize  ", fileSize)
 	fmt.Println("total totalPartsNum  ", totalPartsNum)
 	offset := int64(0)
-	partSize := uint32(0)
+	partSize := uint64(0)
 	chunkUploadQ := make(chan *chunkMeta, totalPartsNum)
 	chunkUploadResultQ := make(chan *chunkUploadResult, totalPartsNum)
 
@@ -66,7 +66,7 @@ func NewMultiPartCopyHandler(copyId uuid.UUID, localFile string, chunkSize int, 
 
 	for i := uint64(0); i < totalPartsNum; i++ {
 		offset = offset + int64(partSize)
-		partSize = uint32(math.Min(float64(chunkSize), float64(int64(fileSize)-int64(i*uint64(chunkSize)))))
+		partSize = uint64(math.Min(float64(chunkSize), float64(int64(fileSize)-int64(i*uint64(chunkSize)))))
 		cm := &chunkMeta{i + 1, offset, partSize, nil}
 		chunks = append(chunks, cm)
 	}
