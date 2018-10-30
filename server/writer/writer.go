@@ -88,9 +88,12 @@ func (sc *SingleCopyHandler) Handle() ([]byte, error) {
 	defer sc.fd.Close()
 	f.Truncate(0)
 	toBeRead := sc.CopyOp.GetContentLength()
+	fmt.Println("toBeRead",toBeRead)
 
 	for toBeRead > 0 {
 		len, err := sc.Conn.Read(b)
+		fmt.Println("len read",len)
+
 		if err != nil {
 			return nil, err
 		}
@@ -98,7 +101,9 @@ func (sc *SingleCopyHandler) Handle() ([]byte, error) {
 		if err != nil {
 			return nil, err
 		}
-		toBeRead = toBeRead - uint64(len)
+		toBeRead = toBeRead - uint32(len)
+		fmt.Println("toBeRead Updated",toBeRead)
+
 	}
 
 	return sc.Md5.Sum(nil), nil
@@ -116,5 +121,6 @@ func (sc *SingleCopyHandler) createOrAppendFile(b []byte) error {
 		return err
 	}
 	sc.Md5.Write(b[:len])
+
 	return nil
 }
