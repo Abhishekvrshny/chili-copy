@@ -52,7 +52,7 @@ func sendToServer() {
 func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string) {
 	fmt.Printf("Request : single copy : %s to %s:%s : size=%d, csum=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
 	conn := GetConnection(network, address)
-	conn.Write(protocol.PrepareSingleCopyOpHeader(remoteFile, fileSize))
+	conn.Write(protocol.PrepareSingleCopyRequestOpHeader(remoteFile, fileSize))
 	b, err := ioutil.ReadFile(localFile)
 	if err != nil {
 		fmt.Println(err)
@@ -73,7 +73,7 @@ func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5S
 
 func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string) {
 	conn := GetConnection(network, address)
-	b := protocol.PrepareMultiPartInitOpHeader(remoteFile)
+	b := protocol.PrepareMultiPartInitRequestOpHeader(remoteFile)
 	conn.Write(b)
 	bR := make([]byte, protocol.NumHeaderBytes)
 	conn.Read(bR)
@@ -93,7 +93,7 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 			os.Exit(1)
 		}
 		nConn := GetConnection(network, address)
-		b := protocol.PrepareMultiPartCompleteOpHeader(mir.GetCopyId(), fileSize)
+		b := protocol.PrepareMultiPartCompleteRequestOpHeader(mir.GetCopyId(), fileSize)
 		nConn.Write(b)
 		bR := make([]byte, protocol.NumHeaderBytes)
 		nConn.Read(bR)

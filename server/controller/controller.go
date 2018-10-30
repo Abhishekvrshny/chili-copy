@@ -12,6 +12,7 @@ import (
 	"github.com/chili-copy/server/writer"
 	"github.com/google/uuid"
 )
+const scratchDir = "/tmp/"
 
 type ChiliController struct {
 	acceptedConns           chan net.Conn
@@ -87,9 +88,9 @@ func (cc *ChiliController) handleConnection() {
 			fmt.Println("Received multipart copy part req with copyId ", copyId)
 			_, ok := cc.onGoingMultiCopiesByIds.Load(copyId)
 			if ok {
-				mcp, tmpDir := protocol.NewMultiPartCopyPartOp(headerBytes, copyId)
+				mcp := protocol.NewMultiPartCopyPartOp(headerBytes, copyId,scratchDir)
 				opHandle := writer.SingleCopyHandler{Conn: conn, Md5: md5.New(), CopyOp: mcp}
-				opHandle.CreateDir(tmpDir)
+				opHandle.CreateDir(scratchDir+copyId)
 				csum, err := opHandle.Handle()
 				if err != nil {
 					fmt.Println("error response")
@@ -128,7 +129,7 @@ func (cc *ChiliController) handleConnection() {
 	}
 }
 func singleCopySuccessResponse(csum []byte, conn net.Conn) {
-	payload := protocol.GetSingleCopySuccessOp(csum)
+	payload := protocol.PrepareSingleCopySuccessResponseOpHeader(csum)
 	toBeWritten := len(payload)
 	for toBeWritten > 0 {
 		len, err := conn.Write(payload)
@@ -145,7 +146,7 @@ func errorResponse(err error, conn net.Conn) {
 }
 
 func multiPartCopyInitSuccessResponse(copyId uuid.UUID, conn net.Conn) {
-	payload := protocol.GetMultiPartCopyInitSuccessOp(copyId)
+	payload := protocol.PrepareMultiPartCopyInitSuccessResponseOpHeader(copyId)
 	toBeWritten := len(payload)
 	for toBeWritten > 0 {
 		len, err := conn.Write(payload)
@@ -158,7 +159,7 @@ func multiPartCopyInitSuccessResponse(copyId uuid.UUID, conn net.Conn) {
 }
 
 func multiPartCopyCompleteSuccessResponse(csum []byte, conn net.Conn) {
-	payload := protocol.GetMultiPartCopySuccessOp(csum)
+	payload := protocol.PrepareMultiPartCopySuccessResponseOpHeader(csum)
 	toBeWritten := len(payload)
 	for toBeWritten > 0 {
 		len, err := conn.Write(payload)

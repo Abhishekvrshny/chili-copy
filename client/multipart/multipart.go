@@ -116,7 +116,7 @@ func (muh *MultiPartCopyHandler) worker(workerId int) {
 		if err != nil {
 			os.Exit(1)
 		}
-		conn.Write(protocol.PrepareMultiPartCopyPartOpHeader(chunk.partNum, muh.copyId, chunk.chunkSize))
+		conn.Write(protocol.PrepareMultiPartCopyPartRequestOpHeader(chunk.partNum, muh.copyId, chunk.chunkSize))
 		conn.Write(buffer)
 		bR := make([]byte, protocol.NumHeaderBytes)
 		conn.Read(bR)
