@@ -11,7 +11,7 @@ import (
 	"github.com/chili-copy/common/protocol"
 	"github.com/chili-copy/server/writer"
 	"github.com/google/uuid"
-	"encoding/binary"
+	"github.com/chili-copy/common"
 )
 
 const scratchDir = "/tmp/"
@@ -42,7 +42,7 @@ func (cc *ChiliController) CreateAcceptedConnHandlers(size int) {
 
 func (cc *ChiliController) handleConnection() {
 	for conn := range cc.acceptedConns {
-		opType, headerBytes, err := getOpTypeFromHeader(conn)
+		opType, headerBytes, err := common.GetOpTypeFromHeader(conn)
 		if err != nil {
 			errorResponse(err, conn)
 		}
@@ -104,7 +104,6 @@ func (cc *ChiliController) handleConnection() {
 				}
 				mcop, _ := cc.onGoingMultiCopiesByIds.Load(copyId)
 				mcop.(*writer.MultiPartCopyHandler).IncreaseTotalPartsCopiedByOne()
-				fmt.Println("Success response, csum", csum)
 				sendCopySuccessResponse(csum, conn, protocol.SingleCopySuccessResponseType)
 				conn.Close()
 			} else {
@@ -117,7 +116,7 @@ func (cc *ChiliController) handleConnection() {
 			opHandle, ok := cc.onGoingMultiCopiesByIds.Load(copyId)
 			if ok {
 				hash := opHandle.(*writer.MultiPartCopyHandler).StitchChunks()
-				fmt.Println("multipart hash is", hex.EncodeToString(hash))
+				fmt.Println("successfully written multipart copy with csum ", hex.EncodeToString(hash))
 				cc.onGoingMultiCopiesByIds.Delete(copyId)
 				cc.onGoingCopyOpsByPath.Delete(opHandle.(*writer.MultiPartCopyHandler).CopyOp.GetFilePath())
 				sendCopySuccessResponse(hash, conn, protocol.MultiPartCopySuccessResponseType)
@@ -158,14 +157,4 @@ func sendCopySuccessResponse(csum []byte, conn net.Conn, opType protocol.OpType)
 		}
 		toBeWritten = toBeWritten - len
 	}
-}
-
-func getOpTypeFromHeader(conn net.Conn) (protocol.OpType, []byte, error) {
-	b := make([]byte, protocol.NumHeaderBytes)
-	err := binary.Read(conn,binary.LittleEndian,b)
-	if err != nil {
-		fmt.Printf("Unable to read from connection. Error : %s\n",err.Error())
-		return protocol.Unknown,b,err
-	}
-	return protocol.GetOp(b), b, nil
 }

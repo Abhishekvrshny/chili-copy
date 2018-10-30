@@ -40,9 +40,7 @@ func (mpc *MultiPartCopyHandler) StitchChunks() []byte {
 	fout.Truncate(0)
 	for num := uint64(1); num <= mpc.TotalPartsCopied; num++ {
 		path := "/tmp/" + mpc.CopyOp.GetCopyId().String() + "/" + strconv.FormatUint(num, 10)
-		fmt.Println("path is ", num)
 		fin, err := os.Open(path)
-		fmt.Println("stitching path ", path)
 		if err != nil {
 			fmt.Println("Error in MultiPartCopyHandler opening chunk ", err.Error())
 			os.Exit(94)

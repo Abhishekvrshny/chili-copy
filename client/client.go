@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"net"
 	"os"
 
 	"github.com/chili-copy/client/multipart"
 	"github.com/chili-copy/common"
 	"github.com/chili-copy/common/protocol"
+	"errors"
 )
 
 const (
@@ -63,87 +63,104 @@ func sendToServer(server string, chunkSize uint64, workers int, localFile string
 	if fileSize < int64(chunkSize) {
 		return singleCopy(localFile, remoteFile, uint64(fileSize), returnMD5String, server)
 	} else {
-		//return multiPartCopy(localFile, remoteFile, uint64(fileSize), returnMD5String,server,workers,chunkSize)
+		multiPartCopy(localFile, remoteFile, uint64(fileSize), returnMD5String,server,workers,chunkSize)
 		return singleCopy(localFile, remoteFile, uint64(fileSize), returnMD5String, server)
 	}
 	return nil
 }
 
 func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string, server string) error {
-	fmt.Printf("Request : single copy : %s to %s:%s : size=%d, csum=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
-	conn, err := GetConnection(network, server)
+	fmt.Printf("Request : single copy : %s to %s:%s : size=%d, csum@client =%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
+	conn, err := common.GetConnection(network, server)
 	if err != nil {
 		return err
 	}
-	conn.Write(protocol.PrepareSingleCopyRequestOpHeader(remoteFile, fileSize))
+	err = common.SendBytesToServer(conn,protocol.PrepareSingleCopyRequestOpHeader(remoteFile, fileSize))
+	if err != nil {
+		return nil
+	}
 	b, err := ioutil.ReadFile(localFile)
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		fmt.Println("Unable to read local file. Error : %s", err.Error())
+		return err
 	}
-	conn.Write(b)
-	bR := make([]byte, protocol.NumHeaderBytes)
-	conn.Read(bR)
-	opType := protocol.GetOp(bR)
+	err = common.SendBytesToServer(conn,b)
+	if err != nil {
+		return nil
+	}
+	opType, headerBytes, err := common.GetOpTypeFromHeader(conn)
+	if err != nil {
+		return err
+	}
 	switch opType {
 	case protocol.SingleCopySuccessResponseType:
-		nsr := protocol.NewSingleCopySuccessResponseOp(bR)
+		nsr := protocol.NewSingleCopySuccessResponseOp(headerBytes)
 		if nsr.GetCsum() == returnMD5String {
-			fmt.Printf("Response : Successfully copied : %s to %s:%s : size=%d, csum=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
+			fmt.Printf("Response : successfully copied : %s to %s:%s : size=%d, csum@server=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
+		} else {
+			fmt.Println("Response : checksum mismatch from server")
+			return errors.New("checksum mismatch from server")
 		}
 	}
 	return nil
 }
 
 func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string, server string, workers int, chunkSize uint64) error{
-	conn, err := GetConnection(network, server)
+	fmt.Printf("Request : multipart copy : %s to %s:%s : size=%d, csum@client=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
+	conn, err := common.GetConnection(network, server)
 	if err != nil {
 		return err
 	}
+	defer conn.Close()
 	b := protocol.PrepareMultiPartInitRequestOpHeader(remoteFile)
-	conn.Write(b)
-	bR := make([]byte, protocol.NumHeaderBytes)
-	conn.Read(bR)
-	opType := protocol.GetOp(bR)
+	err = common.SendBytesToServer(conn,b)
+	if err != nil {
+		return nil
+	}
+	opType, headerBytes, err := common.GetOpTypeFromHeader(conn)
+	if err != nil {
+		return err
+	}
 	switch opType {
 	case protocol.MultiPartCopyInitSuccessResponseOpType:
-		mir, err := protocol.NewMultiPartCopyInitSuccessResponseOp(bR)
-		if err != nil {
-			os.Exit(1)
-		}
-		fmt.Println("copyId received is ", mir.GetCopyId().String())
-		muh := multipart.NewMultiPartCopyHandler(mir.GetCopyId(), localFile, chunkSize, workers, network, address)
-		defer muh.Close()
-		err = muh.Handle()
-		if err != nil {
-			fmt.Println("error is ", err.Error())
-			os.Exit(1)
-		}
-		nConn, err := GetConnection(network, address)
+		mir, err := protocol.NewMultiPartCopyInitSuccessResponseOp(headerBytes)
 		if err != nil {
 			return err
 		}
+		fmt.Printf("CopyId received from server : %s\n", mir.GetCopyId().String())
+		muh, err := multipart.NewMultiPartCopyHandler(mir.GetCopyId(), localFile, chunkSize, workers, network, address)
+		if err != nil {
+			return err
+		}
+		defer muh.Close()
+		err = muh.Handle()
+		if err != nil {
+			return err
+		}
+		nConn, err := common.GetConnection(network, address)
+		if err != nil {
+			return err
+		}
+		defer nConn.Close()
 		b := protocol.PrepareMultiPartCompleteRequestOpHeader(mir.GetCopyId(), fileSize)
-		nConn.Write(b)
-		bR := make([]byte, protocol.NumHeaderBytes)
-		nConn.Read(bR)
-		opType := protocol.GetOp(bR)
+		err = common.SendBytesToServer(nConn,b)
+		if err != nil {
+			return nil
+		}
+		opType, headerBytes, err := common.GetOpTypeFromHeader(nConn)
+		if err != nil {
+			return err
+		}
 		switch opType {
 		case protocol.MultiPartCopySuccessResponseType:
-			nsr := protocol.NewSingleCopySuccessResponseOp(bR)
+			nsr := protocol.NewSingleCopySuccessResponseOp(headerBytes)
 			if nsr.GetCsum() == returnMD5String {
-				fmt.Printf("Response : Successfully copied : %s to %s:%s : size=%d, csum=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
+				fmt.Printf("Response : successfully copied : %s to %s:%s : size=%d, csum@server=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
+			} else {
+				fmt.Println("Response : Checksum mismatch from server")
+				return errors.New("checksum mismatch from server")
 			}
 		}
 	}
 	return nil
-}
-
-func GetConnection(network string, address string) (net.Conn, error) {
-	conn, err := net.Dial(network, address)
-	if err != nil {
-		fmt.Printf("Failed to open connection to server. Error : %s\n",err.Error())
-		return nil,err
-	}
-	return conn,nil
 }

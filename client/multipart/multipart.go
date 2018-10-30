@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"hash"
 	"math"
-	"net"
 	"os"
 
 	"github.com/chili-copy/common"
@@ -24,7 +23,7 @@ const (
 type MultiPartCopyHandler struct {
 	copyId           uuid.UUID
 	fd               *os.File
-	nProcs           int
+	workers          int
 	chunkCopyJobQ    chan *chunkMeta
 	chunkCopyResultQ chan *chunkUploadResult
 	network          string
@@ -48,15 +47,16 @@ func (muh *MultiPartCopyHandler) GetNumParts() int {
 	return len(muh.chunkList)
 }
 
-func NewMultiPartCopyHandler(copyId uuid.UUID, localFile string, chunkSize uint64, nProcs int, network string, address string) *MultiPartCopyHandler {
+func NewMultiPartCopyHandler(copyId uuid.UUID, localFile string, chunkSize uint64, nProcs int, network string, address string) (*MultiPartCopyHandler, error) {
 	fd, err := os.Open(localFile)
 	if err != nil {
-		os.Exit(1)
+		fmt.Printf("Error in opening local file. Error : %s", err.Error())
+		return nil, err
 	}
 	fileSize := common.FileSize(fd)
 	totalPartsNum := uint64(math.Ceil(float64(fileSize) / float64(chunkSize)))
-	fmt.Println("total fileSize  ", fileSize)
-	fmt.Println("total totalPartsNum  ", totalPartsNum)
+	fmt.Println("Total fileSize : ", fileSize)
+	fmt.Println("Total # of parts : ", totalPartsNum)
 	offset := int64(0)
 	partSize := uint64(0)
 	chunkUploadQ := make(chan *chunkMeta, totalPartsNum)
@@ -70,15 +70,15 @@ func NewMultiPartCopyHandler(copyId uuid.UUID, localFile string, chunkSize uint6
 		cm := &chunkMeta{i + 1, offset, partSize, nil}
 		chunks = append(chunks, cm)
 	}
-	return &MultiPartCopyHandler{copyId: copyId, fd: fd, nProcs: nProcs,
+	return &MultiPartCopyHandler{copyId: copyId, fd: fd, workers: nProcs,
 		chunkCopyJobQ: chunkUploadQ, chunkCopyResultQ: chunkUploadResultQ,
-		network: network, address: address, chunkList: chunks}
+		network: network, address: address, chunkList: chunks}, nil
 }
 
 func (muh *MultiPartCopyHandler) Handle() error {
 	totalChunksSuccessful := uint64(0)
 	totalChunksFailed := uint64(0)
-	for w := 1; w <= muh.nProcs; w++ {
+	for w := 1; w <= muh.workers; w++ {
 		go muh.worker(w)
 	}
 	for _, chunkJob := range muh.chunkList {
@@ -102,31 +102,44 @@ func (muh *MultiPartCopyHandler) Handle() error {
 
 func (muh *MultiPartCopyHandler) worker(workerId int) {
 	for chunk := range muh.chunkCopyJobQ {
-		conn, err := net.Dial(muh.network, muh.address)
-		defer conn.Close()
+		conn, err := common.GetConnection(muh.network, muh.address)
 		if err != nil {
-			os.Exit(1)
+			muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
 		}
+		defer conn.Close()
 		buffer := make([]byte, chunk.chunkSize)
 		_, err = muh.fd.ReadAt(buffer, chunk.offset)
+		if err != nil {
+			muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
+		}
 		digest := md5.New()
 		digest.Write(buffer)
 		hash := digest.Sum(nil)
 		returnMD5String := hex.EncodeToString(hash)
 		if err != nil {
-			os.Exit(1)
+			muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
 		}
-		conn.Write(protocol.PrepareMultiPartCopyPartRequestOpHeader(chunk.partNum, muh.copyId, chunk.chunkSize))
-		conn.Write(buffer)
-		bR := make([]byte, protocol.NumHeaderBytes)
-		conn.Read(bR)
-		opType := protocol.GetOp(bR)
+		b := protocol.PrepareMultiPartCopyPartRequestOpHeader(chunk.partNum, muh.copyId, chunk.chunkSize)
+		err = common.SendBytesToServer(conn,b)
+		if err != nil {
+			muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
+		}
+		err = common.SendBytesToServer(conn,buffer)
+		if err != nil {
+			muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
+		}
+		opType, headerBytes, err := common.GetOpTypeFromHeader(conn)
+		if err != nil {
+			muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
+		}
 		switch opType {
 		case protocol.SingleCopySuccessResponseType:
-			nsr := protocol.NewSingleCopySuccessResponseOp(bR)
+			nsr := protocol.NewSingleCopySuccessResponseOp(headerBytes)
 			if nsr.GetCsum() == returnMD5String {
+				fmt.Printf("Response : successfully uploaded chunk # %d\n",chunk.partNum)
 				muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, SUCCESSFUL}
 			} else {
+				fmt.Printf("Response : failed to upload chunk # %d\n",chunk.partNum)
 				muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
 			}
 		default:
