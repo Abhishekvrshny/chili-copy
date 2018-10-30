@@ -48,7 +48,7 @@ func (muh *MultiPartCopyHandler) GetNumParts() int {
 	return len(muh.chunkList)
 }
 
-func NewMultiPartCopyHandler(copyId uuid.UUID, localFile string, chunkSize int, nProcs int, network string, address string) *MultiPartCopyHandler {
+func NewMultiPartCopyHandler(copyId uuid.UUID, localFile string, chunkSize uint64, nProcs int, network string, address string) *MultiPartCopyHandler {
 	fd, err := os.Open(localFile)
 	if err != nil {
 		os.Exit(1)

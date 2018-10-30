@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -21,12 +22,28 @@ const (
 
 func main() {
 	fmt.Println("chili-copy client")
-	sendToServer()
+	server, chunkSize, workerThreads, localPath, remotePath := getCmdArgs()
+	sendToServer(server, chunkSize, workerThreads, localPath, remotePath)
 }
 
-func sendToServer() {
-	localFile := "/tmp/test.txt"
-	remoteFile := "/tmp/abc.txt"
+func getCmdArgs() (string, uint64, int, string, string) {
+	var server string
+	var localPath string
+	var remotePath string
+	flag.StringVar(&server, "destination-address", "localhost:5678", "destination server host and port")
+	flag.StringVar(&localPath, "local-file", "/tmp/test.txt", "local file to copy")
+	flag.StringVar(&remotePath, "remote-file", "/tmp/abc.txt", "remote file at destination")
+
+	chunkSize := flag.Uint64("chunk-size", 500, "multipart chunk size (bytes)")
+	workerThreads := flag.Int("worker-count", 100, "count of worker threads")
+
+	flag.Parse()
+
+	return server, *chunkSize, *workerThreads, localPath, remotePath
+}
+
+func sendToServer(server string, chunkSize uint64, workers int, localFile string, remoteFile string) {
+
 	fd, err := os.Open(localFile)
 	defer fd.Close()
 	if err != nil {
@@ -40,18 +57,17 @@ func sendToServer() {
 	hashInBytes := hash.Sum(nil)[:16]
 	returnMD5String := hex.EncodeToString(hashInBytes)
 	fileSize := common.FileSize(fd)
-	if fileSize < 1000 {
-		singleCopy(localFile, remoteFile, uint64(fileSize), returnMD5String)
+	if fileSize < int64(chunkSize) {
+		singleCopy(localFile, remoteFile, uint64(fileSize), returnMD5String, server)
 	} else {
-		multiPartCopy(localFile, remoteFile, uint64(fileSize), returnMD5String)
-		//singleCopy(localFile,remoteFile, uint64(fileSize), returnMD5String)
+		multiPartCopy(localFile, remoteFile, uint64(fileSize), returnMD5String,server,workers,chunkSize)
 	}
 
 }
 
-func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string) {
+func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string, server string) {
 	fmt.Printf("Request : single copy : %s to %s:%s : size=%d, csum=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
-	conn := GetConnection(network, address)
+	conn := GetConnection(network, server)
 	conn.Write(protocol.PrepareSingleCopyRequestOpHeader(remoteFile, fileSize))
 	b, err := ioutil.ReadFile(localFile)
 	if err != nil {
@@ -71,8 +87,8 @@ func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5S
 	}
 }
 
-func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string) {
-	conn := GetConnection(network, address)
+func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string, server string, workers int, chunkSize uint64) {
+	conn := GetConnection(network, server)
 	b := protocol.PrepareMultiPartInitRequestOpHeader(remoteFile)
 	conn.Write(b)
 	bR := make([]byte, protocol.NumHeaderBytes)
@@ -85,7 +101,7 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 			os.Exit(1)
 		}
 		fmt.Println("copyId received is ", mir.GetCopyId().String())
-		muh := multipart.NewMultiPartCopyHandler(mir.GetCopyId(), localFile, 500, 20, network, address)
+		muh := multipart.NewMultiPartCopyHandler(mir.GetCopyId(), localFile, chunkSize, workers, network, address)
 		defer muh.Close()
 		err = muh.Handle()
 		if err != nil {
