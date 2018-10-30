@@ -14,7 +14,7 @@ const NumHeaderBytes = 512
 type OpType int
 
 const (
-	SingleCopyOpType = iota
+	SingleCopyOpType OpType = iota
 	SingleCopySuccessResponseType
 	MultiPartCopyInitOpType
 	MultiPartCopyInitSuccessResponseOpType
@@ -162,17 +162,14 @@ func NewMultiPartCopyPartOp(b []byte, copyId string, scratchDir string) *SingleC
 ///////////////////////////////////////////////////////////
 
 
-func PrepareSingleCopySuccessResponseOpHeader(csum []byte) []byte {
+func PrepareCopySuccessResponseOpHeader(csum []byte, opType OpType) []byte {
 	buf := new(bytes.Buffer)
-	binary.Write(buf, binary.LittleEndian, []byte(singleCopySuccessResponseOpCode))
-	binary.Write(buf, binary.LittleEndian, csum)
-	binary.Write(buf, binary.LittleEndian, make([]byte,NumHeaderBytes-len(buf.Bytes())))
-	return buf.Bytes()
-}
-
-func PrepareMultiPartCopySuccessResponseOpHeader(csum []byte) []byte {
-	buf := new(bytes.Buffer)
-	binary.Write(buf, binary.LittleEndian, []byte(multiPartCopySuccessResponseOpCode))
+	switch opType {
+	case SingleCopySuccessResponseType:
+		binary.Write(buf, binary.LittleEndian, []byte(singleCopySuccessResponseOpCode))
+	case MultiPartCopySuccessResponseType:
+		binary.Write(buf, binary.LittleEndian, []byte(multiPartCopySuccessResponseOpCode))
+	}
 	binary.Write(buf, binary.LittleEndian, csum)
 	binary.Write(buf, binary.LittleEndian, make([]byte,NumHeaderBytes-len(buf.Bytes())))
 	return buf.Bytes()

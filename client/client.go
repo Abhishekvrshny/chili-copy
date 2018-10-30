@@ -23,17 +23,21 @@ const (
 func main() {
 	fmt.Println("chili-copy client")
 	server, chunkSize, workerThreads, localPath, remotePath := getCmdArgs()
-	sendToServer(server, chunkSize, workerThreads, localPath, remotePath)
+	err := sendToServer(server, chunkSize, workerThreads, localPath, remotePath)
+	if err != nil {
+		fmt.Printf("Failed to copy. Error : %s\n",err.Error())
+		os.Exit(1)
+	}
 }
 
 func getCmdArgs() (string, uint64, int, string, string) {
 	var server string
 	var localPath string
 	var remotePath string
-	flag.StringVar(&server, "destination-address", "localhost:5678", "destination server host and port")
+
+	flag.StringVar(&server, "destination-address", "localhost:5678", "destination server host and port (eg. localhost:5678)")
 	flag.StringVar(&localPath, "local-file", "/tmp/test.txt", "local file to copy")
 	flag.StringVar(&remotePath, "remote-file", "/tmp/abc.txt", "remote file at destination")
-
 	chunkSize := flag.Uint64("chunk-size", 500, "multipart chunk size (bytes)")
 	workerThreads := flag.Int("worker-count", 100, "count of worker threads")
 
@@ -42,32 +46,35 @@ func getCmdArgs() (string, uint64, int, string, string) {
 	return server, *chunkSize, *workerThreads, localPath, remotePath
 }
 
-func sendToServer(server string, chunkSize uint64, workers int, localFile string, remoteFile string) {
-
+func sendToServer(server string, chunkSize uint64, workers int, localFile string, remoteFile string) error {
 	fd, err := os.Open(localFile)
 	defer fd.Close()
 	if err != nil {
-		fmt.Println(err)
-		return
+		fmt.Printf("Unable to open local file %s. Error %s\n",localFile, err.Error())
+		return err
 	}
 	hash := md5.New()
 	if _, err := io.Copy(hash, fd); err != nil {
-		os.Exit(1)
+		fmt.Printf("Failed to generate checksum. Error : %s\n", err.Error())
 	}
 	hashInBytes := hash.Sum(nil)[:16]
 	returnMD5String := hex.EncodeToString(hashInBytes)
 	fileSize := common.FileSize(fd)
 	if fileSize < int64(chunkSize) {
-		singleCopy(localFile, remoteFile, uint64(fileSize), returnMD5String, server)
+		return singleCopy(localFile, remoteFile, uint64(fileSize), returnMD5String, server)
 	} else {
-		multiPartCopy(localFile, remoteFile, uint64(fileSize), returnMD5String,server,workers,chunkSize)
+		//return multiPartCopy(localFile, remoteFile, uint64(fileSize), returnMD5String,server,workers,chunkSize)
+		return singleCopy(localFile, remoteFile, uint64(fileSize), returnMD5String, server)
 	}
-
+	return nil
 }
 
-func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string, server string) {
+func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string, server string) error {
 	fmt.Printf("Request : single copy : %s to %s:%s : size=%d, csum=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
-	conn := GetConnection(network, server)
+	conn, err := GetConnection(network, server)
+	if err != nil {
+		return err
+	}
 	conn.Write(protocol.PrepareSingleCopyRequestOpHeader(remoteFile, fileSize))
 	b, err := ioutil.ReadFile(localFile)
 	if err != nil {
@@ -85,10 +92,14 @@ func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5S
 			fmt.Printf("Response : Successfully copied : %s to %s:%s : size=%d, csum=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
 		}
 	}
+	return nil
 }
 
-func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string, server string, workers int, chunkSize uint64) {
-	conn := GetConnection(network, server)
+func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string, server string, workers int, chunkSize uint64) error{
+	conn, err := GetConnection(network, server)
+	if err != nil {
+		return err
+	}
 	b := protocol.PrepareMultiPartInitRequestOpHeader(remoteFile)
 	conn.Write(b)
 	bR := make([]byte, protocol.NumHeaderBytes)
@@ -108,7 +119,10 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 			fmt.Println("error is ", err.Error())
 			os.Exit(1)
 		}
-		nConn := GetConnection(network, address)
+		nConn, err := GetConnection(network, address)
+		if err != nil {
+			return err
+		}
 		b := protocol.PrepareMultiPartCompleteRequestOpHeader(mir.GetCopyId(), fileSize)
 		nConn.Write(b)
 		bR := make([]byte, protocol.NumHeaderBytes)
@@ -121,14 +135,15 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 				fmt.Printf("Response : Successfully copied : %s to %s:%s : size=%d, csum=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
 			}
 		}
-
 	}
+	return nil
 }
 
-func GetConnection(network string, address string) net.Conn {
+func GetConnection(network string, address string) (net.Conn, error) {
 	conn, err := net.Dial(network, address)
 	if err != nil {
-		os.Exit(1)
+		fmt.Printf("Failed to open connection to server. Error : %s\n",err.Error())
+		return nil,err
 	}
-	return conn
+	return conn,nil
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/chili-copy/common/protocol"
 	"github.com/chili-copy/server/writer"
 	"github.com/google/uuid"
+	"encoding/binary"
 )
 
 const scratchDir = "/tmp/"
@@ -63,7 +64,7 @@ func (cc *ChiliController) handleConnection() {
 					conn.Close()
 					return
 				}
-				singleCopySuccessResponse(csum, conn)
+				sendCopySuccessResponse(csum, conn, protocol.SingleCopySuccessResponseType)
 				cc.onGoingCopyOpsByPath.Delete(sco.GetFilePath())
 				conn.Close()
 			}
@@ -104,7 +105,7 @@ func (cc *ChiliController) handleConnection() {
 				mcop, _ := cc.onGoingMultiCopiesByIds.Load(copyId)
 				mcop.(*writer.MultiPartCopyHandler).IncreaseTotalPartsCopiedByOne()
 				fmt.Println("Success response, csum", csum)
-				singleCopySuccessResponse(csum, conn)
+				sendCopySuccessResponse(csum, conn, protocol.SingleCopySuccessResponseType)
 				conn.Close()
 			} else {
 				errorResponse(err, conn)
@@ -119,7 +120,7 @@ func (cc *ChiliController) handleConnection() {
 				fmt.Println("multipart hash is", hex.EncodeToString(hash))
 				cc.onGoingMultiCopiesByIds.Delete(copyId)
 				cc.onGoingCopyOpsByPath.Delete(opHandle.(*writer.MultiPartCopyHandler).CopyOp.GetFilePath())
-				multiPartCopyCompleteSuccessResponse(hash, conn)
+				sendCopySuccessResponse(hash, conn, protocol.MultiPartCopySuccessResponseType)
 				conn.Close()
 			} else {
 				errorResponse(err, conn)
@@ -127,18 +128,6 @@ func (cc *ChiliController) handleConnection() {
 			}
 
 		}
-	}
-}
-func singleCopySuccessResponse(csum []byte, conn net.Conn) {
-	payload := protocol.PrepareSingleCopySuccessResponseOpHeader(csum)
-	toBeWritten := len(payload)
-	for toBeWritten > 0 {
-		len, err := conn.Write(payload)
-		if err != nil {
-			fmt.Println("Error sending success response")
-			os.Exit(4)
-		}
-		toBeWritten = toBeWritten - len
 	}
 }
 
@@ -159,33 +148,24 @@ func multiPartCopyInitSuccessResponse(copyId uuid.UUID, conn net.Conn) {
 	}
 }
 
-func multiPartCopyCompleteSuccessResponse(csum []byte, conn net.Conn) {
-	payload := protocol.PrepareMultiPartCopySuccessResponseOpHeader(csum)
+func sendCopySuccessResponse(csum []byte, conn net.Conn, opType protocol.OpType) {
+	payload := protocol.PrepareCopySuccessResponseOpHeader(csum,opType)
 	toBeWritten := len(payload)
 	for toBeWritten > 0 {
 		len, err := conn.Write(payload)
 		if err != nil {
-			fmt.Printf("Sending success response failed : %s\n", err.Error())
+			fmt.Printf("Sending success response failed : Error %s\n", err.Error())
 		}
 		toBeWritten = toBeWritten - len
 	}
-
 }
 
 func getOpTypeFromHeader(conn net.Conn) (protocol.OpType, []byte, error) {
 	b := make([]byte, protocol.NumHeaderBytes)
-	toBeRead := protocol.NumHeaderBytes
-	for toBeRead > 0 {
-		len, err := conn.Read(b)
-		if len == 0 {
-			fmt.Println("zero length received, connection prematurely closed by client")
-			return protocol.Unknown, b, err
-		}
-		if len != 0 && err != nil {
-			fmt.Printf("error while reading from socket : %s\n", err.Error())
-			return protocol.Unknown, b, err
-		}
-		toBeRead = toBeRead - len
+	err := binary.Read(conn,binary.LittleEndian,b)
+	if err != nil {
+		fmt.Printf("Unable to read from connection. Error : %s\n",err.Error())
+		return protocol.Unknown,b,err
 	}
 	return protocol.GetOp(b), b, nil
 }
