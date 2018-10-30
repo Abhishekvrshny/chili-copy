@@ -17,7 +17,6 @@ import (
 
 const (
 	network = "tcp"
-	address = "localhost:5678"
 )
 
 func main() {
@@ -36,8 +35,8 @@ func getCmdArgs() (string, uint64, int, string, string) {
 	var remotePath string
 
 	flag.StringVar(&server, "destination-address", "localhost:5678", "destination server host and port (eg. localhost:5678)")
-	flag.StringVar(&localPath, "local-file", "/tmp/test.txt", "local file to copy")
-	flag.StringVar(&remotePath, "remote-file", "/tmp/abc.txt", "remote file at destination")
+	flag.StringVar(&localPath, "local-file", "", "local file to copy")
+	flag.StringVar(&remotePath, "remote-file", "", "remote file at destination")
 	chunkSize := flag.Uint64("chunk-size", 500, "multipart chunk size (bytes)")
 	workerThreads := flag.Int("worker-count", 100, "count of worker threads")
 
@@ -63,14 +62,13 @@ func initiateCopy(server string, chunkSize uint64, workers int, localFile string
 	if fileSize < int64(chunkSize) {
 		return singleCopy(localFile, remoteFile, uint64(fileSize), returnMD5String, server)
 	} else {
-		multiPartCopy(localFile, remoteFile, uint64(fileSize), returnMD5String, server, workers, chunkSize)
-		return singleCopy(localFile, remoteFile, uint64(fileSize), returnMD5String, server)
+		return multiPartCopy(localFile, remoteFile, uint64(fileSize), returnMD5String, server, workers, chunkSize)
 	}
 	return nil
 }
 
 func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string, server string) error {
-	fmt.Printf("Request : single copy : %s to %s:%s : size=%d, csum@client =%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
+	fmt.Printf("Request : single copy : %s to %s:%s : size=%d, csum@client =%s\n", localFile, server, remoteFile, fileSize, returnMD5String)
 	conn, err := common.GetConnection(network, server)
 	if err != nil {
 		return err
@@ -96,7 +94,7 @@ func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5S
 	case protocol.SingleCopySuccessResponseOpType:
 		nsr := protocol.NewSingleCopySuccessResponseOp(headerBytes)
 		if nsr.GetCsum() == returnMD5String {
-			fmt.Printf("Response : successfully copied : %s to %s:%s : size=%d, csum@server=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
+			fmt.Printf("Response : successfully copied : %s to %s:%s : size=%d, csum@server=%s\n", localFile, server, remoteFile, fileSize, returnMD5String)
 		} else {
 			fmt.Println("Response : checksum mismatch from server")
 			return errors.New("checksum mismatch from server")
@@ -108,7 +106,7 @@ func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5S
 }
 
 func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string, server string, workers int, chunkSize uint64) error {
-	fmt.Printf("Request : multipart copy : %s to %s:%s : size=%d, csum@client=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
+	fmt.Printf("Request : multipart copy : %s to %s:%s : size=%d, csum@client=%s\n", localFile, server, remoteFile, fileSize, returnMD5String)
 	conn, err := common.GetConnection(network, server)
 	if err != nil {
 		return err
@@ -129,7 +127,7 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 			return err
 		}
 		fmt.Printf("CopyId received from server : %s\n", mir.GetCopyId().String())
-		muh, err := multipart.NewMultiPartCopyHandler(mir.GetCopyId(), localFile, chunkSize, workers, network, address)
+		muh, err := multipart.NewMultiPartCopyHandler(mir.GetCopyId(), localFile, chunkSize, workers, network, server)
 		if err != nil {
 			return err
 		}
@@ -138,7 +136,7 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 		if err != nil {
 			return err
 		}
-		nConn, err := common.GetConnection(network, address)
+		nConn, err := common.GetConnection(network, server)
 		if err != nil {
 			return err
 		}
@@ -155,7 +153,7 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 		case protocol.MultiPartCopySuccessResponseOpType:
 			nsr := protocol.NewSingleCopySuccessResponseOp(headerBytes)
 			if nsr.GetCsum() == returnMD5String {
-				fmt.Printf("Response : successfully copied : %s to %s:%s : size=%d, csum@server=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
+				fmt.Printf("Response : successfully copied : %s to %s:%s : size=%d, csum@server=%s\n", localFile, server, remoteFile, fileSize, returnMD5String)
 			} else {
 				fmt.Println("Response : Checksum mismatch from server")
 				return errors.New("checksum mismatch from server")
