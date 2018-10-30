@@ -166,6 +166,7 @@ func PrepareSingleCopySuccessResponseOpHeader(csum []byte) []byte {
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, []byte(singleCopySuccessResponseOpCode))
 	binary.Write(buf, binary.LittleEndian, csum)
+	binary.Write(buf, binary.LittleEndian, make([]byte,NumHeaderBytes-len(buf.Bytes())))
 	return buf.Bytes()
 }
 
@@ -173,6 +174,7 @@ func PrepareMultiPartCopySuccessResponseOpHeader(csum []byte) []byte {
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, []byte(multiPartCopySuccessResponseOpCode))
 	binary.Write(buf, binary.LittleEndian, csum)
+	binary.Write(buf, binary.LittleEndian, make([]byte,NumHeaderBytes-len(buf.Bytes())))
 	return buf.Bytes()
 }
 
@@ -181,6 +183,7 @@ func PrepareMultiPartCopyInitSuccessResponseOpHeader(copyId uuid.UUID) []byte {
 	binary.Write(buf, binary.LittleEndian, []byte(multiPartInitSuccessResponseOpCode))
 	binaryUuid, _ := copyId.MarshalBinary()
 	binary.Write(buf, binary.LittleEndian, binaryUuid)
+	binary.Write(buf, binary.LittleEndian, make([]byte,NumHeaderBytes-len(buf.Bytes())))
 	return buf.Bytes()
 }
 
@@ -190,6 +193,7 @@ func PrepareSingleCopyRequestOpHeader(remoteFile string, fileSize uint64) []byte
 	binary.Write(buf, binary.LittleEndian, fileSize)
 	binary.Write(buf, binary.LittleEndian, uint8(len(remoteFile)))
 	binary.Write(buf, binary.LittleEndian, []byte(remoteFile))
+	binary.Write(buf,binary.LittleEndian,make([]byte,NumHeaderBytes-len(buf.Bytes())))
 	return buf.Bytes()
 }
 
@@ -197,6 +201,7 @@ func PrepareMultiPartInitRequestOpHeader(remoteFile string) []byte {	buf := new(
 	binary.Write(buf, binary.LittleEndian, []byte(multiPartInitRequestOpCode))
 	binary.Write(buf, binary.LittleEndian, uint8(len(remoteFile)))
 	binary.Write(buf, binary.LittleEndian, []byte(remoteFile))
+	binary.Write(buf, binary.LittleEndian, make([]byte,NumHeaderBytes-len(buf.Bytes())))
 	return buf.Bytes()
 }
 
@@ -205,27 +210,19 @@ func PrepareMultiPartCompleteRequestOpHeader(copyId uuid.UUID, fileSize uint64) 
 	cId, _ := copyId.MarshalBinary()
 	binary.Write(buf, binary.LittleEndian, cId)
 	binary.Write(buf, binary.LittleEndian, fileSize)
+	binary.Write(buf, binary.LittleEndian, make([]byte,NumHeaderBytes-len(buf.Bytes())))
 	return buf.Bytes()
 }
 
 func PrepareMultiPartCopyPartRequestOpHeader(partNum uint64, copyId uuid.UUID, partSize uint64) []byte {
-	bytes := make([]byte, NumHeaderBytes)
-	pNum := make([]byte, 8)
-	binary.LittleEndian.PutUint64(pNum, partNum)
-
-	pSize := make([]byte, 8)
-	binary.LittleEndian.PutUint64(pSize, partSize)
-
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, []byte(multiPartCopyPartRequestOpCode))
 	cId, _ := copyId.MarshalBinary()
-
-	header := []byte(multiPartCopyPartRequestOpCode)
-	header = append(header, cId...)
-	header = append(header, pNum...)
-	header = append(header, pSize...)
-
-	copy(bytes[:], header)
-
-	return bytes
+	binary.Write(buf, binary.LittleEndian, cId)
+	binary.Write(buf, binary.LittleEndian, partNum)
+	binary.Write(buf, binary.LittleEndian, partSize)
+	binary.Write(buf, binary.LittleEndian, make([]byte,NumHeaderBytes-len(buf.Bytes())))
+	return buf.Bytes()
 }
 
 func ParseCopyId(b []byte) (string, error) {

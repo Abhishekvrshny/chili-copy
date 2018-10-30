@@ -12,6 +12,7 @@ import (
 	"github.com/chili-copy/server/writer"
 	"github.com/google/uuid"
 )
+
 const scratchDir = "/tmp/"
 
 type ChiliController struct {
@@ -40,9 +41,9 @@ func (cc *ChiliController) CreateAcceptedConnHandlers(size int) {
 
 func (cc *ChiliController) handleConnection() {
 	for conn := range cc.acceptedConns {
-		opType,headerBytes,err := getOpTypeFromHeader(conn)
+		opType, headerBytes, err := getOpTypeFromHeader(conn)
 		if err != nil {
-			errorResponse(err,conn)
+			errorResponse(err, conn)
 		}
 		switch opType {
 		case protocol.SingleCopyOpType:
@@ -88,9 +89,9 @@ func (cc *ChiliController) handleConnection() {
 			fmt.Println("Received multipart copy part req with copyId ", copyId)
 			_, ok := cc.onGoingMultiCopiesByIds.Load(copyId)
 			if ok {
-				mcp := protocol.NewMultiPartCopyPartOp(headerBytes, copyId,scratchDir)
+				mcp := protocol.NewMultiPartCopyPartOp(headerBytes, copyId, scratchDir)
 				opHandle := writer.SingleCopyHandler{Conn: conn, Md5: md5.New(), CopyOp: mcp}
-				opHandle.CreateDir(scratchDir+copyId)
+				opHandle.CreateDir(scratchDir + copyId)
 				csum, err := opHandle.Handle()
 				if err != nil {
 					fmt.Println("error response")
@@ -164,24 +165,27 @@ func multiPartCopyCompleteSuccessResponse(csum []byte, conn net.Conn) {
 	for toBeWritten > 0 {
 		len, err := conn.Write(payload)
 		if err != nil {
-			fmt.Println("Error sending success response")
-			os.Exit(4)
+			fmt.Printf("Sending success response failed : %s\n", err.Error())
 		}
 		toBeWritten = toBeWritten - len
 	}
 
 }
 
-func getOpTypeFromHeader(conn net.Conn) (protocol.OpType, []byte,error) {
+func getOpTypeFromHeader(conn net.Conn) (protocol.OpType, []byte, error) {
 	b := make([]byte, protocol.NumHeaderBytes)
-	len, err := conn.Read(b)
-	if len == 0 {
-		fmt.Println("zero length received, connection prematurely closed by client")
-		return protocol.Unknown,b,err
+	toBeRead := protocol.NumHeaderBytes
+	for toBeRead > 0 {
+		len, err := conn.Read(b)
+		if len == 0 {
+			fmt.Println("zero length received, connection prematurely closed by client")
+			return protocol.Unknown, b, err
+		}
+		if len != 0 && err != nil {
+			fmt.Printf("error while reading from socket : %s\n", err.Error())
+			return protocol.Unknown, b, err
+		}
+		toBeRead = toBeRead - len
 	}
-	if len != 0 && err != nil {
-		fmt.Printf("error while reading from socket : %s\n",err.Error())
-		return protocol.Unknown,b,err
-	}
-	return protocol.GetOp(b),b,nil
+	return protocol.GetOp(b), b, nil
 }
