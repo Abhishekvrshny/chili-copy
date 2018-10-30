@@ -83,8 +83,10 @@ type SingleCopySuccessResponseOp struct {
 }
 
 func NewSingleCopySuccessResponseOp(b []byte) *SingleCopySuccessResponseOp {
-	return &SingleCopySuccessResponseOp{hex.EncodeToString(b[2 : 2+16])}
-}
+	buf := bytes.NewReader(b[2:2+16])
+	md5 := make([]byte,16)
+	binary.Read(buf, binary.LittleEndian,&md5)
+	return &SingleCopySuccessResponseOp{hex.EncodeToString(md5)}}
 
 func (nsr *SingleCopySuccessResponseOp) GetCsum() string {
 	return nsr.Md5
