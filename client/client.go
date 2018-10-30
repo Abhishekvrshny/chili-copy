@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -12,7 +13,6 @@ import (
 	"github.com/chili-copy/client/multipart"
 	"github.com/chili-copy/common"
 	"github.com/chili-copy/common/protocol"
-	"errors"
 )
 
 const (
@@ -23,9 +23,9 @@ const (
 func main() {
 	fmt.Println("chili-copy client")
 	server, chunkSize, workerThreads, localPath, remotePath := getCmdArgs()
-	err := sendToServer(server, chunkSize, workerThreads, localPath, remotePath)
+	err := initiateCopy(server, chunkSize, workerThreads, localPath, remotePath)
 	if err != nil {
-		fmt.Printf("Failed to copy. Error : %s\n",err.Error())
+		fmt.Printf("Failed to copy. Error : %s\n", err.Error())
 		os.Exit(1)
 	}
 }
@@ -46,11 +46,11 @@ func getCmdArgs() (string, uint64, int, string, string) {
 	return server, *chunkSize, *workerThreads, localPath, remotePath
 }
 
-func sendToServer(server string, chunkSize uint64, workers int, localFile string, remoteFile string) error {
+func initiateCopy(server string, chunkSize uint64, workers int, localFile string, remoteFile string) error {
 	fd, err := os.Open(localFile)
 	defer fd.Close()
 	if err != nil {
-		fmt.Printf("Unable to open local file %s. Error %s\n",localFile, err.Error())
+		fmt.Printf("Unable to open local file %s. Error %s\n", localFile, err.Error())
 		return err
 	}
 	hash := md5.New()
@@ -63,7 +63,7 @@ func sendToServer(server string, chunkSize uint64, workers int, localFile string
 	if fileSize < int64(chunkSize) {
 		return singleCopy(localFile, remoteFile, uint64(fileSize), returnMD5String, server)
 	} else {
-		multiPartCopy(localFile, remoteFile, uint64(fileSize), returnMD5String,server,workers,chunkSize)
+		multiPartCopy(localFile, remoteFile, uint64(fileSize), returnMD5String, server, workers, chunkSize)
 		return singleCopy(localFile, remoteFile, uint64(fileSize), returnMD5String, server)
 	}
 	return nil
@@ -75,7 +75,7 @@ func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5S
 	if err != nil {
 		return err
 	}
-	err = common.SendBytesToServer(conn,protocol.PrepareSingleCopyRequestOpHeader(remoteFile, fileSize))
+	err = common.SendBytesToServer(conn, protocol.PrepareSingleCopyRequestOpHeader(remoteFile, fileSize))
 	if err != nil {
 		return nil
 	}
@@ -84,7 +84,7 @@ func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5S
 		fmt.Println("Unable to read local file. Error : %s", err.Error())
 		return err
 	}
-	err = common.SendBytesToServer(conn,b)
+	err = common.SendBytesToServer(conn, b)
 	if err != nil {
 		return nil
 	}
@@ -93,7 +93,7 @@ func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5S
 		return err
 	}
 	switch opType {
-	case protocol.SingleCopySuccessResponseType:
+	case protocol.SingleCopySuccessResponseOpType:
 		nsr := protocol.NewSingleCopySuccessResponseOp(headerBytes)
 		if nsr.GetCsum() == returnMD5String {
 			fmt.Printf("Response : successfully copied : %s to %s:%s : size=%d, csum@server=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
@@ -101,18 +101,20 @@ func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5S
 			fmt.Println("Response : checksum mismatch from server")
 			return errors.New("checksum mismatch from server")
 		}
+	case protocol.ErrorResponseOpType:
+		return errors.New(protocol.ErrorsMap[protocol.ParseErrorType(headerBytes)])
 	}
 	return nil
 }
 
-func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string, server string, workers int, chunkSize uint64) error{
+func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnMD5String string, server string, workers int, chunkSize uint64) error {
 	fmt.Printf("Request : multipart copy : %s to %s:%s : size=%d, csum@client=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
 	conn, err := common.GetConnection(network, server)
 	if err != nil {
 		return err
 	}
 	b := protocol.PrepareMultiPartInitRequestOpHeader(remoteFile)
-	err = common.SendBytesToServer(conn,b)
+	err = common.SendBytesToServer(conn, b)
 	if err != nil {
 		return nil
 	}
@@ -141,7 +143,7 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 			return err
 		}
 		b := protocol.PrepareMultiPartCompleteRequestOpHeader(mir.GetCopyId(), fileSize)
-		err = common.SendBytesToServer(nConn,b)
+		err = common.SendBytesToServer(nConn, b)
 		if err != nil {
 			return nil
 		}
@@ -150,7 +152,7 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 			return err
 		}
 		switch opType {
-		case protocol.MultiPartCopySuccessResponseType:
+		case protocol.MultiPartCopySuccessResponseOpType:
 			nsr := protocol.NewSingleCopySuccessResponseOp(headerBytes)
 			if nsr.GetCsum() == returnMD5String {
 				fmt.Printf("Response : successfully copied : %s to %s:%s : size=%d, csum@server=%s\n", localFile, address, remoteFile, fileSize, returnMD5String)
@@ -158,7 +160,11 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 				fmt.Println("Response : Checksum mismatch from server")
 				return errors.New("checksum mismatch from server")
 			}
+		case protocol.ErrorResponseOpType:
+			return errors.New(protocol.ErrorsMap[protocol.ParseErrorType(headerBytes)])
 		}
+	case protocol.ErrorResponseOpType:
+		return errors.New(protocol.ErrorsMap[protocol.ParseErrorType(headerBytes)])
 	}
 	return nil
 }

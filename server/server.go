@@ -37,7 +37,7 @@ func getCmdArgs() (string, *int, *int) {
 func startChiliServer(cc *controller.ChiliController, network string, port string) {
 	ln, err := net.Listen(network, port)
 	if err != nil {
-		fmt.Printf("Unable to start server on port %s. Failed with error : %s\n",port, err.Error())
+		fmt.Printf("Unable to start server on port %s. Failed with error : %s\n", port, err.Error())
 		os.Exit(1)
 	}
 	for {

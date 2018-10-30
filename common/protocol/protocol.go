@@ -1,12 +1,12 @@
 package protocol
 
 import (
+	"bytes"
 	"encoding/binary"
+	"encoding/hex"
 	"strconv"
 
 	"github.com/google/uuid"
-	"encoding/hex"
-	"bytes"
 )
 
 const NumHeaderBytes = 512
@@ -15,12 +15,13 @@ type OpType int
 
 const (
 	SingleCopyOpType OpType = iota
-	SingleCopySuccessResponseType
+	SingleCopySuccessResponseOpType
 	MultiPartCopyInitOpType
 	MultiPartCopyInitSuccessResponseOpType
 	MultiPartCopyPartRequestOpType
 	MultiPartCopyCompleteOpType
-	MultiPartCopySuccessResponseType
+	MultiPartCopySuccessResponseOpType
+	ErrorResponseOpType
 	Unknown
 )
 const (
@@ -31,14 +32,33 @@ const (
 	multiPartCopyPartRequestOpCode     = "MC"
 	multiPartCompleteRequestOpCode     = "MT"
 	multiPartCopySuccessResponseOpCode = "MM"
+	errorResponseOpCode                = "ER"
 )
+
+type ErrType int8
+
+const (
+	ErrorParsingHeader ErrType = iota
+	ErrorCopyOpInProgress
+	ErrorWritingSingleCopy
+	ErrorWritingPart
+	ErrorCopyIdNotFound
+)
+
+var ErrorsMap = map[ErrType]string{
+	ErrorParsingHeader:     "error parsing headers",
+	ErrorCopyOpInProgress:  "single copy operation already in progress",
+	ErrorWritingSingleCopy: "error writing single file at server",
+	ErrorWritingPart:       "error writing part at server",
+	ErrorCopyIdNotFound:    "copyId supplied by the client is not known",
+}
 
 func GetOp(b []byte) OpType {
 	switch string(b[:2]) {
 	case singleCopyRequestOpCode:
 		return SingleCopyOpType
 	case singleCopySuccessResponseOpCode:
-		return SingleCopySuccessResponseType
+		return SingleCopySuccessResponseOpType
 	case multiPartInitRequestOpCode:
 		return MultiPartCopyInitOpType
 	case multiPartInitSuccessResponseOpCode:
@@ -48,7 +68,9 @@ func GetOp(b []byte) OpType {
 	case multiPartCompleteRequestOpCode:
 		return MultiPartCopyCompleteOpType
 	case multiPartCopySuccessResponseOpCode:
-		return MultiPartCopySuccessResponseType
+		return MultiPartCopySuccessResponseOpType
+	case errorResponseOpCode:
+		return ErrorResponseOpType
 	default:
 		return Unknown
 	}
@@ -83,10 +105,11 @@ type SingleCopySuccessResponseOp struct {
 }
 
 func NewSingleCopySuccessResponseOp(b []byte) *SingleCopySuccessResponseOp {
-	buf := bytes.NewReader(b[2:2+16])
-	md5 := make([]byte,16)
-	binary.Read(buf, binary.LittleEndian,&md5)
-	return &SingleCopySuccessResponseOp{hex.EncodeToString(md5)}}
+	buf := bytes.NewReader(b[2 : 2+16])
+	md5 := make([]byte, 16)
+	binary.Read(buf, binary.LittleEndian, &md5)
+	return &SingleCopySuccessResponseOp{hex.EncodeToString(md5)}
+}
 
 func (nsr *SingleCopySuccessResponseOp) GetCsum() string {
 	return nsr.Md5
@@ -161,17 +184,24 @@ func NewMultiPartCopyPartOp(b []byte, copyId string, scratchDir string) *SingleC
 
 ///////////////////////////////////////////////////////////
 
+func PrepareErrorResponseOpHeader(errType ErrType) []byte {
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.LittleEndian, []byte(errorResponseOpCode))
+	binary.Write(buf, binary.LittleEndian, errType)
+	binary.Write(buf, binary.LittleEndian, make([]byte, NumHeaderBytes-len(buf.Bytes())))
+	return buf.Bytes()
+}
 
 func PrepareCopySuccessResponseOpHeader(csum []byte, opType OpType) []byte {
 	buf := new(bytes.Buffer)
 	switch opType {
-	case SingleCopySuccessResponseType:
+	case SingleCopySuccessResponseOpType:
 		binary.Write(buf, binary.LittleEndian, []byte(singleCopySuccessResponseOpCode))
-	case MultiPartCopySuccessResponseType:
+	case MultiPartCopySuccessResponseOpType:
 		binary.Write(buf, binary.LittleEndian, []byte(multiPartCopySuccessResponseOpCode))
 	}
 	binary.Write(buf, binary.LittleEndian, csum)
-	binary.Write(buf, binary.LittleEndian, make([]byte,NumHeaderBytes-len(buf.Bytes())))
+	binary.Write(buf, binary.LittleEndian, make([]byte, NumHeaderBytes-len(buf.Bytes())))
 	return buf.Bytes()
 }
 
@@ -180,7 +210,7 @@ func PrepareMultiPartCopyInitSuccessResponseOpHeader(copyId uuid.UUID) []byte {
 	binary.Write(buf, binary.LittleEndian, []byte(multiPartInitSuccessResponseOpCode))
 	binaryUuid, _ := copyId.MarshalBinary()
 	binary.Write(buf, binary.LittleEndian, binaryUuid)
-	binary.Write(buf, binary.LittleEndian, make([]byte,NumHeaderBytes-len(buf.Bytes())))
+	binary.Write(buf, binary.LittleEndian, make([]byte, NumHeaderBytes-len(buf.Bytes())))
 	return buf.Bytes()
 }
 
@@ -190,24 +220,26 @@ func PrepareSingleCopyRequestOpHeader(remoteFile string, fileSize uint64) []byte
 	binary.Write(buf, binary.LittleEndian, fileSize)
 	binary.Write(buf, binary.LittleEndian, uint8(len(remoteFile)))
 	binary.Write(buf, binary.LittleEndian, []byte(remoteFile))
-	binary.Write(buf,binary.LittleEndian,make([]byte,NumHeaderBytes-len(buf.Bytes())))
+	binary.Write(buf, binary.LittleEndian, make([]byte, NumHeaderBytes-len(buf.Bytes())))
 	return buf.Bytes()
 }
 
-func PrepareMultiPartInitRequestOpHeader(remoteFile string) []byte {	buf := new(bytes.Buffer)
+func PrepareMultiPartInitRequestOpHeader(remoteFile string) []byte {
+	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, []byte(multiPartInitRequestOpCode))
 	binary.Write(buf, binary.LittleEndian, uint8(len(remoteFile)))
 	binary.Write(buf, binary.LittleEndian, []byte(remoteFile))
-	binary.Write(buf, binary.LittleEndian, make([]byte,NumHeaderBytes-len(buf.Bytes())))
+	binary.Write(buf, binary.LittleEndian, make([]byte, NumHeaderBytes-len(buf.Bytes())))
 	return buf.Bytes()
 }
 
-func PrepareMultiPartCompleteRequestOpHeader(copyId uuid.UUID, fileSize uint64) []byte {	buf := new(bytes.Buffer)
+func PrepareMultiPartCompleteRequestOpHeader(copyId uuid.UUID, fileSize uint64) []byte {
+	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, []byte(multiPartCompleteRequestOpCode))
 	cId, _ := copyId.MarshalBinary()
 	binary.Write(buf, binary.LittleEndian, cId)
 	binary.Write(buf, binary.LittleEndian, fileSize)
-	binary.Write(buf, binary.LittleEndian, make([]byte,NumHeaderBytes-len(buf.Bytes())))
+	binary.Write(buf, binary.LittleEndian, make([]byte, NumHeaderBytes-len(buf.Bytes())))
 	return buf.Bytes()
 }
 
@@ -218,7 +250,7 @@ func PrepareMultiPartCopyPartRequestOpHeader(partNum uint64, copyId uuid.UUID, p
 	binary.Write(buf, binary.LittleEndian, cId)
 	binary.Write(buf, binary.LittleEndian, partNum)
 	binary.Write(buf, binary.LittleEndian, partSize)
-	binary.Write(buf, binary.LittleEndian, make([]byte,NumHeaderBytes-len(buf.Bytes())))
+	binary.Write(buf, binary.LittleEndian, make([]byte, NumHeaderBytes-len(buf.Bytes())))
 	return buf.Bytes()
 }
 
@@ -228,4 +260,9 @@ func ParseCopyId(b []byte) (string, error) {
 		return "", err
 	}
 	return uuid.String(), nil
+}
+
+func ParseErrorType(b []byte) ErrType {
+	errType := ErrType(b[2])
+	return errType
 }

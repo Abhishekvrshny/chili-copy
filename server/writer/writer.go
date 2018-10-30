@@ -23,7 +23,7 @@ type SingleCopyHandler struct {
 type MultiPartCopyHandler struct {
 	CopyOp           *protocol.MultiPartCopyOp
 	TotalPartsCopied uint64
-	ScratchDir string
+	ScratchDir       string
 }
 
 func (mpc *MultiPartCopyHandler) IncreaseTotalPartsCopiedByOne() {
@@ -35,13 +35,13 @@ func (mpc *MultiPartCopyHandler) StitchChunks() ([]byte, error) {
 	fout, err := os.OpenFile(mpc.CopyOp.GetFilePath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Printf("Failed to open file. Error : %s\n", err.Error())
-		return nil,err
+		return nil, err
 	}
 	defer fout.Close()
 	err = fout.Truncate(0)
 	if err != nil {
-		fmt.Printf("Failed to truncate file. Error : %s",err.Error())
-		return nil,err
+		fmt.Printf("Failed to truncate file. Error : %s", err.Error())
+		return nil, err
 	}
 	for num := uint64(1); num <= mpc.TotalPartsCopied; num++ {
 		path := mpc.ScratchDir + mpc.CopyOp.GetCopyId().String() + "/" + strconv.FormatUint(num, 10)
@@ -91,8 +91,8 @@ func (sc *SingleCopyHandler) Handle() ([]byte, error) {
 	defer sc.fd.Close()
 	err = f.Truncate(0)
 	if err != nil {
-		fmt.Printf("Failed to truncate file. Error : %s\n",err.Error())
-		return nil,err
+		fmt.Printf("Failed to truncate file. Error : %s\n", err.Error())
+		return nil, err
 	}
 	toBeRead := sc.CopyOp.GetContentLength()
 	for toBeRead > 0 {
