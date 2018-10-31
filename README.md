@@ -69,7 +69,9 @@ Usage of ./bin/ccp_client:
 
 ***-local-file*** : Path of local file.
 
-***-remote-file*** : Number of workers to send multipart chunks. default is number of CPUs on the system.
+***-remote-file*** : Path of remote file
+
+***-worker-count*** : Number of workers to send multipart chunks. default is number of CPUs on the system.
 
 ## Internals and Working of chili-copy
 chili-copy is based on a custom-built binary protocol over TCP that is used to perform 2 types of transfer:
@@ -191,6 +193,7 @@ This is used by server to send various errors to the client.
 * Stitching logic can be optimised at server. right now 2x space is needed in this process. It could be done with a constant small buffer size.
 * Unit tests are completely missing as of now.
 * Perform thorough benchmarks
+* Implement graceful shutdown of the server.
 
 ## Chili-Copy in Action
 
