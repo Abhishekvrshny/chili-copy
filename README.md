@@ -189,8 +189,51 @@ This is used by server to send various errors to the client.
 * The `protocol` package can be refactored to make it more intuitive.
 * Handshake can be introduced between server and client to determine right amount of parallelism.
 * Stitching logic can be optimised at server. right now 2x space is needed in this process. It could be done with a constant small buffer size.
+* Unit tests are completely missing as of now.
+* Perform thorough benchmarks
 
-## chili-copy in action
+## Chili-Copy in Action
 
 [![chili-copy](http://img.youtube.com/vi/Nzc3WpUjiOE/0.jpg)](https://youtu.be/Nzc3WpUjiOE "chili-copy")
+
+## Quick Benchmark with scp
+
+A quick benchmark with scp was done. For a ~85MB file, chili-copy was ~65% faster than scp, with a chunk-size of 4MB. 
+
+```
+⋊> ~/g/s/g/chili-copy on master ⨯ time ./bin/ccp_client -destination-address=10.33.121.238:5678 -remote-file=/tmp/abc -local-file=/Users/abhishek.varshney/Downloads/go1.10.4.darwin-amd64.tar.gz  -worker-count=6 -chunk-size=4194304
+chili-copy client
+Request : multipart copy : /Users/abhishek.varshney/Downloads/go1.10.4.darwin-amd64.tar.gz to 10.33.121.238:5678:/tmp/abc : size=90700370, csum@client=4497a2c528d8fcd9e1bad7c77fbc01df
+CopyId received from server : 31c031d1-dd44-11e8-baf3-02010a2179ee
+Total fileSize :  90700370
+Total # of parts :  22
+Response : successfully uploaded chunk # 2
+Response : successfully uploaded chunk # 4
+Response : successfully uploaded chunk # 1
+Response : successfully uploaded chunk # 8
+Response : successfully uploaded chunk # 7
+Response : successfully uploaded chunk # 11
+Response : successfully uploaded chunk # 3
+Response : successfully uploaded chunk # 10
+Response : successfully uploaded chunk # 13
+Response : successfully uploaded chunk # 12
+Response : successfully uploaded chunk # 9
+Response : successfully uploaded chunk # 6
+Response : successfully uploaded chunk # 5
+Response : successfully uploaded chunk # 14
+Response : successfully uploaded chunk # 16
+Response : successfully uploaded chunk # 15
+Response : successfully uploaded chunk # 20
+Response : successfully uploaded chunk # 22
+Response : successfully uploaded chunk # 19
+Response : successfully uploaded chunk # 21
+Response : successfully uploaded chunk # 18
+Response : successfully uploaded chunk # 17
+Successfully copied 22 chunks out of 22
+Response : successfully copied : /Users/abhishek.varshney/Downloads/go1.10.4.darwin-amd64.tar.gz to 10.33.121.238:5678:/tmp/abc : size=90700370, csum@server=4497a2c528d8fcd9e1bad7c77fbc01df
+       29.39 real         0.67 user         0.91 sys
+⋊> ~/g/s/g/chili-copy on master ⨯ time scp /Users/abhishek.varshney/Downloads/go1.10.4.darwin-amd64.tar.gz 10.33.121.238:                                                                                                             01:06:54
+go1.10.4.darwin-amd64.tar.gz                                                                                                                                                                                100%   86MB   1.7MB/s   00:51
+       52.64 real         1.62 user         0.90 sys
+⋊> ~/g/s/g/chili-copy on master ⨯                                                                                                                                                                                                     01:08:05```
 
