@@ -21,12 +21,12 @@ const (
 )
 
 func main() {
-	fmt.Println("chili-copy client")
 	server, chunkSize, workerThreads, localPath, remotePath := getCmdArgs()
 	if localPath == "" || remotePath == "" || server == ""{
 		fmt.Println("One or more argument missing")
 		os.Exit(1)
 	}
+	fmt.Println("Initiating copy ...")
 	err := initiateCopy(server, chunkSize, workerThreads, localPath, remotePath)
 	if err != nil {
 		fmt.Printf("Failed to copy. Error : %s\n", err.Error())

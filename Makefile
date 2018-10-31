@@ -2,13 +2,13 @@ MAKEFILE_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 SERVER_BINARY := $(MAKEFILE_DIR)/bin/ccp_server
 CLIENT_BINARY := $(MAKEFILE_DIR)/bin/ccp_client
 
-deps: 
-	go get -u github.com/google/uuid
-
 all: deps
-	mkdir $(MAKEFILE_DIR)/bin/
+	mkdir -p $(MAKEFILE_DIR)/bin/ || echo "Failed to create dir"
 	cd server && go build -o $(SERVER_BINARY) server.go
 	cd client && go build -o $(CLIENT_BINARY) client.go
+
+deps: 
+	go get -u github.com/google/uuid
 
 linux: deps
 	cd server && GOARCH=amd64 GOOS=linux go build -o $(SERVER_BINARY)_linux_amd64 server.go
