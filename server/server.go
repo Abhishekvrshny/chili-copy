@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/chili-copy/server/controller"
+	"runtime"
 )
 
 const (
@@ -25,8 +26,8 @@ func main() {
 func getCmdArgs() (string, *int, *int) {
 	var port string
 	flag.StringVar(&port, "port", "5678", "server port")
-	ConnQSize := flag.Int("conn-size", 100, "connection queue size")
-	workerThreads := flag.Int("worker-count", 100, "count of worker threads")
+	ConnQSize := flag.Int("conn-size", runtime.NumCPU()*10, "connection queue size")
+	workerThreads := flag.Int("worker-count", runtime.NumCPU(), "count of worker threads")
 
 	flag.Parse()
 	port = fmt.Sprintf(":%s", port)

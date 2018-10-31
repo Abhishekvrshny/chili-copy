@@ -13,6 +13,7 @@ import (
 	"github.com/chili-copy/client/multipart"
 	"github.com/chili-copy/common"
 	"github.com/chili-copy/common/protocol"
+	"runtime"
 )
 
 const (
@@ -22,10 +23,14 @@ const (
 func main() {
 	fmt.Println("chili-copy client")
 	server, chunkSize, workerThreads, localPath, remotePath := getCmdArgs()
+	if localPath == "" || remotePath == "" || server == ""{
+		fmt.Println("One or more argument missing")
+		os.Exit(1)
+	}
 	err := initiateCopy(server, chunkSize, workerThreads, localPath, remotePath)
 	if err != nil {
 		fmt.Printf("Failed to copy. Error : %s\n", err.Error())
-		os.Exit(1)
+		os.Exit(2)
 	}
 }
 
@@ -34,11 +39,11 @@ func getCmdArgs() (string, uint64, int, string, string) {
 	var localPath string
 	var remotePath string
 
-	flag.StringVar(&server, "destination-address", "localhost:5678", "destination server host and port (eg. localhost:5678)")
+	flag.StringVar(&server, "destination-address", "", "destination server host and port (eg. localhost:5678)")
 	flag.StringVar(&localPath, "local-file", "", "local file to copy")
 	flag.StringVar(&remotePath, "remote-file", "", "remote file at destination")
-	chunkSize := flag.Uint64("chunk-size", 500, "multipart chunk size (bytes)")
-	workerThreads := flag.Int("worker-count", 100, "count of worker threads")
+	chunkSize := flag.Uint64("chunk-size", 16*1024*1024, "multipart chunk size (bytes)")
+	workerThreads := flag.Int("worker-count", runtime.NumCPU(), "count of worker threads")
 
 	flag.Parse()
 
