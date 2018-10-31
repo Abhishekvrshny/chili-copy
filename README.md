@@ -3,7 +3,7 @@
 
 --------------------------------
 ## Overview
-chili-copy is a parallel file transfer client-server software that efficiently transfers large files to remote machines over a network.
+chili-copy is a parallel file transfer client-server software that efficiently transfers large files to remote machines over a network. It is implemented using a novel custom protocol, named as CCFTP, which is described in later sections. 
 ## Getting Started
 ### Building From Source
 chili-copy is written in `Go`. To be able o build it on your machine. Please make sure `Go version 1.11` or higher is installed on your system and `$GOPATH` is appropriately is set.
@@ -27,7 +27,7 @@ This would generate two binaries in `./bin/`:
 
 #### Download Binaries
 The binaries can also be downloaded from https://github.com/Abhishekvrshny/chili-copy/releases and run directly. Please note that there are different binaries for `osx` and `linux` which are suffixed appropriately.
-### Running the server
+## Running the server
 The `ccp_server -help`
 ```
 # Usage of ./bin/ccp_server:
@@ -38,10 +38,14 @@ The `ccp_server -help`
   -worker-count int
     	count of worker threads (default 4)
 ```
+
 ***-conn-size*** : The queue size of the accepted connections. Default is number of CPUs x 10
+
 ***-port*** : The port on which to bind the server
+
 ***-worker-count*** : The number of worker threads that read from connection queue and process the requests. Default is number of CPUs on the system.
-### Running the client
+
+## Running the client
 The `ccp_client -help`
 ```
 Usage of ./bin/ccp_client:
@@ -56,13 +60,18 @@ Usage of ./bin/ccp_client:
   -worker-count int
     	count of worker threads (default 4)
 ```
+
 ***-chunk-size*** : This is used in 2 places. 1. To initiate multipart copy only if fileseize is greater than `chunk-size`. Also, in multipart copy, file is chunked sent to server in chunks of size `chunk-size`
+
 ***-destination-address*** : Server host and port where the copy is to be done.
+
 ***-local-file*** : Path of local file.
+
 **-remote-file*** : Number of workers to send multipart chunks. default is number of CPUs on the system.
-### Internals and Working of chili-copy
+
+## Internals and Working of chili-copy
 chili-copy is based on a custom-built binary protocol over TCP that is used to perform 2 types of transfer:
-#### Single Copy Transfer
+### Single Copy Transfer
 As part of single copy, following things happen:
 1. Client identifies that the file size is less than chunk size and hence initiate single copy.
 2. Client creates a TCP connection with the server.
@@ -71,29 +80,53 @@ As part of single copy, following things happen:
 5. A worker thread in server picks up the connection and reads initial 2 bytes from the protocol header to identify the type of operation.
 6. Server identifies the type of operation as single copy and then reads the rest of the bytes from the protocol header to find the remote file path and content length.
 7. Server adds the remote file path in a map, which would be used to prevent concurrent operations to same remote fie path on server.
-8. Client sends the file over TCP socket to the servr
+8. Client sends the file over TCP socket to the server.
 9. Server reads content-length number of bytes and writes them to the remote path specified.
-10. Server sends the response back to the client with a success header and checksum of the file it recived.
+10. Server sends the response back to the client with a success header and checksum of the file it received.
 11. Client reads initial 2 bytes of the response to identify the type of operation.
-12. Client checks the checksum received and matches it with the local checksum and prints success else prints appropriate error. Error may also be recived from server. 
+12. Client checks the checksum received and matches it with the local checksum and prints success else prints appropriate error. Error may also be received from server. 
 
-#### Multipart Copy Transfer
+### Multipart Copy Transfer
 As part of multipart copy, client identifies that this is a multipart copy as file size is greater than chunk size and initiales following 3 types of operations in the same order
-##### Initiate Multipart Copy
+#### Initiate Multipart Copy
 1. Cleint establishes a TCP connection and sends a header identifying init of a multipart copy.
 2. Server generated and sends a unique copy-id as part of response header. It also adds the remote file path in a map, as described above.
 3. Server also create and adds an entry into a map with copy-id as the key to identify forth coming operations, before sending the response to teh client.
 3. Client creates meta info with fd, chunk size, offset etc and puts it in a job queue.
 4. Client spawns multiple workers (equal to worker-count).
-#### Multipart Copy Part
+### Multipart Copy Part
 1. The workers on the client read the meta info and read the chunks from the fd specified by chunk size and offset. This happens in parallel by each worker independently.
 2. Each worker now initiates a single copy of the part as described earlier.
 3. Server identifies that it's a multipart copy part operation and creates a scratch directory where it keeps writing the chunks received by various workers. The format is `/tmp/<copy-id>/<part-num>`
 4. Server keeps sending success for these parts received as described in single copy
 5. The workers at client put the result in a result queue.
 6. The main thread at client keeps reading the result queue until all the results are received.
-#### Multipart Complete
+### Multipart Complete
 1. After results for all the parts are received by the client, it initiates a multipart complete operation.
-2. The server on recieving this operation, walks through the scratch directory and stitches all the parts and appends them together at the remote file at the server.
+2. The server on receiving this operation, walks through the scratch directory and stitches all the parts and appends them together at the remote file at the server.
 3. Server then sends a checksum of the resultant file as response to the client.
 4. The client verifies the checksum and marks the copy as successful or failed.
+
+## Chili-Copy File Transfer Protocol (CCFTP)
+chili-copy introduces a novel protocol to copy files in chunks, which is being named as CCFTP. CCFTP is a binary protocol that works over TCP. CCFTP works as follows:
+1. The client establishes a connection with the server and sends CCFTP headers followed by data (file oe chunks of file)
+2. The server reads the headers to identify the type of operation and performs appropriate actions.
+3. The server sends back CCFTP header with results in the response
+
+The CCFTP header is 512 bytes. Although, the actual bytes used by the protocol are always less than 300 which are used by various operations. The remaining bytes are padded with zeros before sending the headers across. CCFTP supports the following type of operations and headers.
+
+### singleCopyRequestOpCode
+
+| | | | | |
+|:-:|:-:|:-:|:-:|:-:|
+| opcode<br>(2 bytes)   | filesize<br>(8 bytes)  | length of remote path string<br>(1 byte) | remote file path<br>(upto 255 bytes) | padding<br>(rest of 512 bytes) |
+
+This is used by client to send a single copy request to the server, followed by the contents of the file.
+
+### singleCopySuccessResponseOpCode
+
+| opcode (2 bytes) | file checksum (16 bytes) | padding |
+|------------------|--------------------------|---------|
+
+This is sent by the server to send a successful single copy response to the client.
+
