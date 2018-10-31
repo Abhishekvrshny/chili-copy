@@ -47,7 +47,7 @@ const (
 
 var ErrorsMap = map[ErrType]string{
 	ErrorParsingHeader:     "error parsing headers",
-	ErrorCopyOpInProgress:  "single copy operation already in progress",
+	ErrorCopyOpInProgress:  "copy operation already in progress",
 	ErrorWritingSingleCopy: "error writing single file at server",
 	ErrorWritingPart:       "error writing part at server",
 	ErrorCopyIdNotFound:    "copyId supplied by the client is not known",

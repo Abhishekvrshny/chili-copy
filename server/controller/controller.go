@@ -48,6 +48,7 @@ func (cc *ChiliController) handleConnection() {
 		switch opType {
 		case protocol.SingleCopyOpType:
 			sco := protocol.NewSingleCopyOp(headerBytes)
+			fmt.Printf("Received single copy request for file %s\n",sco.GetFilePath())
 			_, ok := cc.onGoingCopyOpsByPath.Load(sco.GetFilePath())
 			if ok {
 				errorResponse(protocol.ErrorCopyOpInProgress, conn)
@@ -63,6 +64,7 @@ func (cc *ChiliController) handleConnection() {
 					conn.Close()
 					return
 				}
+				fmt.Printf("Sending success for single copy request for file %s\n",sco.GetFilePath())
 				sendCopySuccessResponse(csum, conn, protocol.SingleCopySuccessResponseOpType)
 				cc.onGoingCopyOpsByPath.Delete(sco.GetFilePath())
 				conn.Close()
@@ -116,7 +118,8 @@ func (cc *ChiliController) handleConnection() {
 				if err != nil {
 
 				}
-				fmt.Println("successfully written multipart copy with csum ", hex.EncodeToString(hash))
+				fmt.Printf("Sending success for multipart copy for file %s with csum %s\n",
+					opHandle.(*writer.MultiPartCopyHandler).CopyOp.GetFilePath(), hex.EncodeToString(hash))
 				cc.onGoingMultiCopiesByIds.Delete(copyId)
 				cc.onGoingCopyOpsByPath.Delete(opHandle.(*writer.MultiPartCopyHandler).CopyOp.GetFilePath())
 				sendCopySuccessResponse(hash, conn, protocol.MultiPartCopySuccessResponseOpType)
