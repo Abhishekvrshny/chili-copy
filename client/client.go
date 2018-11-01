@@ -9,11 +9,11 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"runtime"
 
 	"github.com/chili-copy/client/multipart"
 	"github.com/chili-copy/common"
 	"github.com/chili-copy/common/protocol"
-	"runtime"
 )
 
 const (
@@ -22,7 +22,7 @@ const (
 
 func main() {
 	server, chunkSize, workerThreads, localPath, remotePath := getCmdArgs()
-	if localPath == "" || remotePath == "" || server == ""{
+	if localPath == "" || remotePath == "" || server == "" {
 		fmt.Println("One or more argument missing")
 		os.Exit(1)
 	}
@@ -106,6 +106,8 @@ func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5S
 		}
 	case protocol.ErrorResponseOpType:
 		return errors.New(protocol.ErrorsMap[protocol.ParseErrorType(headerBytes)])
+	default:
+		return errors.New("unknown opType received")
 	}
 	return nil
 }
@@ -165,9 +167,13 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 			}
 		case protocol.ErrorResponseOpType:
 			return errors.New(protocol.ErrorsMap[protocol.ParseErrorType(headerBytes)])
+		default:
+			return errors.New("unknown opType received")
 		}
 	case protocol.ErrorResponseOpType:
 		return errors.New(protocol.ErrorsMap[protocol.ParseErrorType(headerBytes)])
+	default:
+		return errors.New("unknown opType received")
 	}
 	return nil
 }

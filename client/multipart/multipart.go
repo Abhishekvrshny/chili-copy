@@ -146,6 +146,7 @@ func (muh *MultiPartCopyHandler) worker(workerId int) {
 			fmt.Printf("failed copying chunk %d with error %s", chunk.partNum, protocol.ErrorsMap[protocol.ParseErrorType(headerBytes)])
 			muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
 		default:
+			fmt.Println("unknown opType received")
 			muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
 		}
 	}

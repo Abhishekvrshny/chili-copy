@@ -43,6 +43,7 @@ const (
 	ErrorWritingSingleCopy
 	ErrorWritingPart
 	ErrorCopyIdNotFound
+	ErrorUnknownOp
 )
 
 var ErrorsMap = map[ErrType]string{
@@ -51,6 +52,7 @@ var ErrorsMap = map[ErrType]string{
 	ErrorWritingSingleCopy: "error writing single file at server",
 	ErrorWritingPart:       "error writing part at server",
 	ErrorCopyIdNotFound:    "copyId supplied by the client is not known",
+	ErrorUnknownOp:         "Unknown operation",
 }
 
 func GetOp(b []byte) OpType {

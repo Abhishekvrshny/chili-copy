@@ -48,12 +48,12 @@ func (cc *ChiliController) handleConnection() {
 		switch opType {
 		case protocol.SingleCopyOpType:
 			sco := protocol.NewSingleCopyOp(headerBytes)
-			fmt.Printf("Received single copy request for file %s\n",sco.GetFilePath())
+			fmt.Printf("Received single copy request for file %s\n", sco.GetFilePath())
 			_, ok := cc.onGoingCopyOpsByPath.Load(sco.GetFilePath())
 			if ok {
 				errorResponse(protocol.ErrorWritingSingleCopy, conn)
 				conn.Close()
-				return
+				break
 			} else {
 				opHandle := &writer.SingleCopyHandler{Conn: conn, Md5: md5.New(), CopyOp: sco}
 				cc.onGoingCopyOpsByPath.Store(sco.GetFilePath(), opHandle)
@@ -62,9 +62,9 @@ func (cc *ChiliController) handleConnection() {
 					errorResponse(protocol.ErrorCopyOpInProgress, conn)
 					cc.onGoingCopyOpsByPath.Delete(sco.GetFilePath())
 					conn.Close()
-					return
+					break
 				}
-				fmt.Printf("Sending success for single copy request for file %s\n",sco.GetFilePath())
+				fmt.Printf("Sending success for single copy request for file %s\n", sco.GetFilePath())
 				sendCopySuccessResponse(csum, conn, protocol.SingleCopySuccessResponseOpType)
 				cc.onGoingCopyOpsByPath.Delete(sco.GetFilePath())
 				conn.Close()
@@ -75,7 +75,7 @@ func (cc *ChiliController) handleConnection() {
 			if ok {
 				errorResponse(protocol.ErrorCopyOpInProgress, conn)
 				conn.Close()
-				return
+				break
 			} else {
 				opHandle := &writer.MultiPartCopyHandler{mpo, uint64(0), scratchDir}
 				//TODO: surround with a lock
@@ -99,7 +99,7 @@ func (cc *ChiliController) handleConnection() {
 					errorResponse(protocol.ErrorWritingPart, conn)
 					cc.onGoingCopyOpsByPath.Delete(mcp.GetFilePath())
 					conn.Close()
-					return
+					break
 				}
 				mcop, _ := cc.onGoingMultiCopiesByIds.Load(copyId)
 				mcop.(*writer.MultiPartCopyHandler).IncreaseTotalPartsCopiedByOne()
@@ -128,7 +128,8 @@ func (cc *ChiliController) handleConnection() {
 				errorResponse(protocol.ErrorCopyIdNotFound, conn)
 				conn.Close()
 			}
-
+		default:
+			errorResponse(protocol.ErrorUnknownOp, conn)
 		}
 	}
 }
