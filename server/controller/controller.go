@@ -41,7 +41,7 @@ func (cc *ChiliController) CreateAcceptedConnHandlers(size int) {
 
 func (cc *ChiliController) handleConnection() {
 	for conn := range cc.acceptedConns {
-		opType, headerBytes, err := common.GetOpTypeFromHeader(conn)
+		opType, headerBytes, err := common.GetOpTypeAndHeaderFromConn(conn)
 		if err != nil {
 			errorResponse(protocol.ErrorParsingHeader, conn)
 		}
@@ -51,7 +51,7 @@ func (cc *ChiliController) handleConnection() {
 			fmt.Printf("Received single copy request for file %s\n",sco.GetFilePath())
 			_, ok := cc.onGoingCopyOpsByPath.Load(sco.GetFilePath())
 			if ok {
-				errorResponse(protocol.ErrorCopyOpInProgress, conn)
+				errorResponse(protocol.ErrorWritingSingleCopy, conn)
 				conn.Close()
 				return
 			} else {
@@ -135,15 +135,15 @@ func (cc *ChiliController) handleConnection() {
 
 func errorResponse(errType protocol.ErrType, conn net.Conn) {
 	payload := protocol.PrepareErrorResponseOpHeader(errType)
-	common.SendBytesToServer(conn, payload)
+	common.SendBytesToConn(conn, payload)
 }
 
 func multiPartCopyInitSuccessResponse(copyId uuid.UUID, conn net.Conn) {
 	payload := protocol.PrepareMultiPartCopyInitSuccessResponseOpHeader(copyId)
-	common.SendBytesToServer(conn, payload)
+	common.SendBytesToConn(conn, payload)
 }
 
 func sendCopySuccessResponse(csum []byte, conn net.Conn, opType protocol.OpType) {
 	payload := protocol.PrepareCopySuccessResponseOpHeader(csum, opType)
-	common.SendBytesToServer(conn, payload)
+	common.SendBytesToConn(conn, payload)
 }

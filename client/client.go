@@ -78,7 +78,7 @@ func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5S
 	if err != nil {
 		return err
 	}
-	err = common.SendBytesToServer(conn, protocol.PrepareSingleCopyRequestOpHeader(remoteFile, fileSize))
+	err = common.SendBytesToConn(conn, protocol.PrepareSingleCopyRequestOpHeader(remoteFile, fileSize))
 	if err != nil {
 		return nil
 	}
@@ -87,11 +87,11 @@ func singleCopy(localFile string, remoteFile string, fileSize uint64, returnMD5S
 		fmt.Println("Unable to read local file. Error : %s", err.Error())
 		return err
 	}
-	err = common.SendBytesToServer(conn, b)
+	err = common.SendBytesToConn(conn, b)
 	if err != nil {
 		return nil
 	}
-	opType, headerBytes, err := common.GetOpTypeFromHeader(conn)
+	opType, headerBytes, err := common.GetOpTypeAndHeaderFromConn(conn)
 	if err != nil {
 		return err
 	}
@@ -117,11 +117,11 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 		return err
 	}
 	b := protocol.PrepareMultiPartInitRequestOpHeader(remoteFile)
-	err = common.SendBytesToServer(conn, b)
+	err = common.SendBytesToConn(conn, b)
 	if err != nil {
 		return nil
 	}
-	opType, headerBytes, err := common.GetOpTypeFromHeader(conn)
+	opType, headerBytes, err := common.GetOpTypeAndHeaderFromConn(conn)
 	if err != nil {
 		return err
 	}
@@ -146,11 +146,11 @@ func multiPartCopy(localFile string, remoteFile string, fileSize uint64, returnM
 			return err
 		}
 		b := protocol.PrepareMultiPartCompleteRequestOpHeader(mir.GetCopyId(), fileSize)
-		err = common.SendBytesToServer(nConn, b)
+		err = common.SendBytesToConn(nConn, b)
 		if err != nil {
 			return nil
 		}
-		opType, headerBytes, err := common.GetOpTypeFromHeader(nConn)
+		opType, headerBytes, err := common.GetOpTypeAndHeaderFromConn(nConn)
 		if err != nil {
 			return err
 		}

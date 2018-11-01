@@ -13,6 +13,8 @@ import (
 	"github.com/chili-copy/common/protocol"
 )
 
+const fileReadBufferSize = 4096
+
 type SingleCopyHandler struct {
 	Conn   net.Conn
 	fd     *os.File
@@ -81,7 +83,7 @@ func (mpc *MultiPartCopyHandler) StitchChunks() ([]byte, error) {
 }
 
 func (sc *SingleCopyHandler) Handle() ([]byte, error) {
-	b := make([]byte, 4096)
+	b := make([]byte, fileReadBufferSize)
 	f, err := os.OpenFile(sc.CopyOp.GetFilePath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		fmt.Printf("error in SingleCopyHandler Handle() : %s\n", err.Error())

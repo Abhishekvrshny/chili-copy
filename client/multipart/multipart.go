@@ -120,15 +120,15 @@ func (muh *MultiPartCopyHandler) worker(workerId int) {
 			muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
 		}
 		b := protocol.PrepareMultiPartCopyPartRequestOpHeader(chunk.partNum, muh.copyId, chunk.chunkSize)
-		err = common.SendBytesToServer(conn, b)
+		err = common.SendBytesToConn(conn, b)
 		if err != nil {
 			muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
 		}
-		err = common.SendBytesToServer(conn, buffer)
+		err = common.SendBytesToConn(conn, buffer)
 		if err != nil {
 			muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
 		}
-		opType, headerBytes, err := common.GetOpTypeFromHeader(conn)
+		opType, headerBytes, err := common.GetOpTypeAndHeaderFromConn(conn)
 		if err != nil {
 			muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
 		}
@@ -142,6 +142,9 @@ func (muh *MultiPartCopyHandler) worker(workerId int) {
 				fmt.Printf("Response : failed to upload chunk # %d\n", chunk.partNum)
 				muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
 			}
+		case protocol.ErrorResponseOpType:
+			fmt.Printf("failed copying chunk %d with error %s", chunk.partNum, protocol.ErrorsMap[protocol.ParseErrorType(headerBytes)])
+			muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
 		default:
 			muh.chunkCopyResultQ <- &chunkUploadResult{chunk.partNum, FAILED}
 		}

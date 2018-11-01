@@ -19,7 +19,7 @@ func FileSize(fd *os.File) int64 {
 	return filesize
 }
 
-func GetOpTypeFromHeader(conn net.Conn) (protocol.OpType, []byte, error) {
+func GetOpTypeAndHeaderFromConn(conn net.Conn) (protocol.OpType, []byte, error) {
 	b := make([]byte, protocol.NumHeaderBytes)
 	err := binary.Read(conn, binary.LittleEndian, b)
 	if err != nil {
@@ -29,7 +29,7 @@ func GetOpTypeFromHeader(conn net.Conn) (protocol.OpType, []byte, error) {
 	return protocol.GetOp(b), b, nil
 }
 
-func SendBytesToServer(conn net.Conn, b []byte) error {
+func SendBytesToConn(conn net.Conn, b []byte) error {
 	toBeWritten := len(b)
 	for toBeWritten > 0 {
 		len, err := conn.Write(b[toBeWritten-len(b) : len(b)])
